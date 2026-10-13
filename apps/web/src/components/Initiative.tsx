@@ -195,6 +195,7 @@ export function InitiativePanel({ campaignId, party, isDm, uid }: { campaignId: 
   const [damage, setDamage] = useState<Record<string, string>>({});
   const [rounds, setRounds] = useState<Record<string, string>>({});
   const [openSheet, setOpenSheet] = useState<string | null>(null);
+  const [openRow, setOpenRow] = useState<string | null>(null);
   const [library, setLibrary] = useState<MonsterDef[] | null>(null);
   useEffect(() => {
     if (openSheet && !library) loadMonsters().then(setLibrary).catch(() => setLibrary([]));
@@ -359,6 +360,13 @@ export function InitiativePanel({ campaignId, party, isDm, uid }: { campaignId: 
                   <button className="btn btn-heal" onClick={() => hit(c.id, -1)}>
                     Cura
                   </button>
+                  <button className="btn btn-quiet more-btn" aria-expanded={openRow === c.id} onClick={() => setOpenRow(openRow === c.id ? null : c.id)}>
+                    Altro
+                  </button>
+                </span>
+              )}
+              {isDm && secret && openRow === c.id && (
+                <span className="init-monster init-more">
                   <input type="number" min={1} value={rounds[c.id] ?? ""} placeholder="round" title="Durata in round: vuoto = finché non la togli" aria-label={`Durata in round della condizione per ${c.name}`} className="short-input" onChange={(e) => setRounds({ ...rounds, [c.id]: e.currentTarget.value })} />
                   <select value="" aria-label={`Aggiungi una condizione a ${c.name}`} onChange={(e) => monster && e.currentTarget.value && setMonsterCondition(monster, e.currentTarget.value, true)}>
                     <option value="">Condizione…</option>
@@ -375,8 +383,8 @@ export function InitiativePanel({ campaignId, party, isDm, uid }: { campaignId: 
                       {openSheet === c.id ? "Chiudi scheda" : "Scheda"}
                     </button>
                   )}
-                  <button className="icon-btn" aria-label={`Togli ${c.name}`} onClick={() => removeMonster(c.id)}>
-                    ×
+                  <button className="btn btn-danger-quiet" onClick={() => removeMonster(c.id)}>
+                    Togli {c.name}
                   </button>
                 </span>
               )}

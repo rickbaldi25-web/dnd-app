@@ -1,6 +1,6 @@
 import { applyDamage, applyHealing, applyProposal, computeSheet, longRest, shortRest, type AutomationLevel, type CharacterData, type ComputedSheet } from "@dnd/engine";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { EncounterBuilder } from "../components/EncounterBuilder";
 import { HandoutsPanel } from "../components/Handouts";
 import { HomebrewPanel } from "../components/Homebrew";
@@ -159,6 +159,7 @@ export function Campaign() {
   const [party, setParty] = useState<CharacterData[]>([]);
   const [own, setOwn] = useState<CharacterData[]>([]);
   const [copied, setCopied] = useState(false);
+  const [params, setParams] = useSearchParams();
 
   const online = usePresence(id);
   const { homebrew } = useHomebrew(id);
@@ -179,6 +180,10 @@ export function Campaign() {
   }
 
   const isDm = campaign.dmUid === user.uid;
+  // La scheda aperta sta nell'indirizzo: resta al ricaricamento e il tasto indietro torna alla precedente.
+  const tabs = [{ id: "tavolo", label: "Al tavolo" }, ...(isDm ? [{ id: "incontri", label: "Incontri" }] : []), { id: "diario", label: "Diario" }, { id: "contenuti", label: "Contenuti" }, { id: "gestione", label: "Gestione" }];
+  const tab = tabs.find((t) => t.id === params.get("scheda"))?.id ?? "tavolo";
+  const go = (id: string) => setParams(id === "tavolo" ? {} : { scheda: id });
   const save = (prev: CharacterData, next: CharacterData) =>
     repo.updateCharacter(prev, next).catch((e) => push({ title: "Salvataggio non riuscito", lines: [String(e?.message ?? e)], tone: "bad" }));
   const link = (ch: CharacterData, on: boolean) => save(ch, { ...ch, campaignId: on ? campaign.id : undefined });
@@ -238,115 +243,137 @@ export function Campaign() {
         </div>
       </header>
 
-      {!isDm && campaign.automationLock && <p className="muted small">Il Master ha fissato l'automazione delle schede su: {AUTOMATION_LABEL[campaign.automationLock]}.</p>}
-      {/* Comandi del Master in un'unica barra */}
-      {isDm && (
-        <section className="panel campaign-toolbar" aria-label="Comandi del Master">
-          <label className="small">
-            <span className="muted">Automazione delle schede</span>
-            <select
-              value={campaign.automationLock ?? ""}
-              onChange={(e) => repo.setAutomationLock(campaign.id, (e.currentTarget.value || null) as AutomationLevel | null).catch((err) => push({ title: "Salvataggio non riuscito", lines: [String(err?.message ?? err)], tone: "bad" }))}
-            >
-              <option value="">Ognuno sceglie la sua</option>
-              <option value="manual">Manuale per tutti</option>
-              <option value="assisted">Assistita per tutti</option>
-              <option value="full">Completa per tutti</option>
-            </select>
-          </label>
-          {party.length > 0 && (
-            <span className="campaign-rests">
-              <button className="btn" onClick={() => restAll("short")}>
-                Riposo breve per tutti
-              </button>
-              <button className="btn" onClick={() => restAll("long")}>
-                Riposo lungo per tutti
-              </button>
-            </span>
-          )}
-        </section>
-      )}
+      <nav className="tabs" role="tablist" aria-label="Sezioni della campagna">
+        {tabs.map((t) => (
+          <button key={t.id} role="tab" id={`tab-${t.id}`} aria-selected={tab === t.id} aria-controls={`pannello-${t.id}`} className={tab === t.id ? "is-on" : ""} onClick={() => go(t.id)}>
+            {t.label}
+          </button>
+        ))}
+      </nav>
 
-      {party.length === 0 && (
-        <section className="panel empty">
-          <p>
-            Nessun personaggio collegato.{" "}
-            {isDm ? "Dai il codice ai giocatori: entrano dalla pagina Campagne e collegano un personaggio." : "Collega uno dei tuoi personaggi qui sotto."}
-          </p>
-        </section>
-      )}
-      {/* Al tavolo: a sinistra ciò che si gioca (iniziativa, gruppo), a destra ciò che si consulta */}
-      <div className="campaign-layout">
-        <div className="campaign-main">
-          <InitiativePanel campaignId={campaign.id} party={party} isDm={isDm} uid={user.uid} />
+      {/* Le sezioni restano tutte montate: cambiando scheda non si perde ciò che si stava scrivendo né gli avvisi. */}
+      <div role="tabpanel" id="pannello-tavolo" aria-labelledby="tab-tavolo" className="tab-panel" hidden={tab !== "tavolo"}>
+        {!isDm && campaign.automationLock && <p className="muted small">Il Master ha fissato l'automazione delle schede su: {AUTOMATION_LABEL[campaign.automationLock]}.</p>}
+        {party.length === 0 && (
+          <section className="panel empty">
+            <p>
+              Nessun personaggio collegato.{" "}
+              {isDm ? "Dai il codice ai giocatori: entrano dalla pagina Campagne e collegano un personaggio." : "Collega uno dei tuoi personaggi dalla scheda Gestione."}
+            </p>
+          </section>
+        )}
+        {/* A sinistra ciò che si gioca (iniziativa, gruppo), a destra ciò che si consulta */}
+        <div className="campaign-layout">
+          <div className="campaign-main">
+            <InitiativePanel campaignId={campaign.id} party={party} isDm={isDm} uid={user.uid} />
 
-          {party.length > 0 && (
-            <h2 className="section-title">
-              Gruppo <span className="muted small">{party.length} personaggi</span>
-            </h2>
-          )}
-          <ul className="party">
-            {party.map((ch) => (
-              <PartyCard key={ch.id} ch={ch} canEdit={isDm} mine={ch.ownerUid === user.uid} online={online.some((p) => p.uid === ch.ownerUid)} />
-            ))}
-          </ul>
+            {party.length > 0 && (
+              <div className="row between section-row">
+                <h2 className="section-title">
+                  Gruppo <span className="muted small">{party.length} personaggi</span>
+                </h2>
+                {isDm && (
+                  <span className="campaign-rests">
+                    <button className="btn" onClick={() => restAll("short")}>
+                      Riposo breve per tutti
+                    </button>
+                    <button className="btn" onClick={() => restAll("long")}>
+                      Riposo lungo per tutti
+                    </button>
+                  </span>
+                )}
+              </div>
+            )}
+            <ul className="party">
+              {party.map((ch) => (
+                <PartyCard key={ch.id} ch={ch} canEdit={isDm} mine={ch.ownerUid === user.uid} online={online.some((p) => p.uid === ch.ownerUid)} />
+              ))}
+            </ul>
+          </div>
 
-          {isDm && <EncounterBuilder campaignId={campaign.id} party={party} />}
+          <aside className="campaign-aside">
+            <RollLog campaignId={campaign.id} isDm={isDm} />
+
+            <HandoutsPanel campaignId={campaign.id} isDm={isDm} uid={user.uid} party={party} />
+          </aside>
         </div>
-
-        <aside className="campaign-aside">
-          <RollLog campaignId={campaign.id} isDm={isDm} />
-
-          <HandoutsPanel campaignId={campaign.id} isDm={isDm} uid={user.uid} party={party} />
-
-          <SessionNotes campaignId={campaign.id} isDm={isDm} />
-        </aside>
       </div>
 
-      <HomebrewPanel campaignId={campaign.id} homebrew={homebrew} isDm={isDm} />
-
-      <section className="panel">
-        <h2>I tuoi personaggi</h2>
-        {own.length === 0 && (
-          <p className="muted">
-            Non hai personaggi. <Link to="/new">Creane uno</Link> e poi collegalo qui.
-          </p>
-        )}
-        <ul className="inv-list">
-          {own.map((ch) => {
-            const here = ch.campaignId === campaign.id;
-            const elsewhere = !!ch.campaignId && !here;
-            return (
-              <li key={ch.id}>
-                <label className="inv-equip">
-                  <input type="checkbox" checked={here} onChange={(e) => link(ch, e.currentTarget.checked)} />
-                  <span>{ch.name}</span>
-                </label>
-                {elsewhere && <span className="muted small">ora in un'altra campagna: spuntandolo lo sposti qui</span>}
-              </li>
-            );
-          })}
-        </ul>
-        <p className="muted small">Spunta un personaggio per portarlo in questa campagna: il Master e gli altri giocatori lo vedranno.</p>
-      </section>
-
-      {!isDm && campaign.memberUids.includes(user.uid) && (
-        <button className="btn btn-danger-quiet" onClick={leave}>
-          Esci dalla campagna
-        </button>
-      )}
       {isDm && (
-        <button
-          className="btn btn-danger-quiet"
-          onClick={async () => {
-            if (!window.confirm(`Eliminare la campagna ${campaign.name}? I personaggi restano ai giocatori.`)) return;
-            await repo.deleteCampaign(campaign.id);
-            nav("/campaigns");
-          }}
-        >
-          Elimina campagna
-        </button>
+        <div role="tabpanel" id="pannello-incontri" aria-labelledby="tab-incontri" className="tab-panel" hidden={tab !== "incontri"}>
+          <EncounterBuilder campaignId={campaign.id} party={party} onLaunch={() => go("tavolo")} />
+        </div>
       )}
+
+      <div role="tabpanel" id="pannello-diario" aria-labelledby="tab-diario" className="tab-panel" hidden={tab !== "diario"}>
+        <SessionNotes campaignId={campaign.id} isDm={isDm} />
+      </div>
+
+      <div role="tabpanel" id="pannello-contenuti" aria-labelledby="tab-contenuti" className="tab-panel" hidden={tab !== "contenuti"}>
+        <HomebrewPanel campaignId={campaign.id} homebrew={homebrew} isDm={isDm} />
+      </div>
+
+      <div role="tabpanel" id="pannello-gestione" aria-labelledby="tab-gestione" className="tab-panel" hidden={tab !== "gestione"}>
+        {isDm && (
+          <section className="panel campaign-toolbar" aria-label="Comandi del Master">
+            <label className="small">
+              <span className="muted">Automazione delle schede</span>
+              <select
+                value={campaign.automationLock ?? ""}
+                onChange={(e) => repo.setAutomationLock(campaign.id, (e.currentTarget.value || null) as AutomationLevel | null).catch((err) => push({ title: "Salvataggio non riuscito", lines: [String(err?.message ?? err)], tone: "bad" }))}
+              >
+                <option value="">Ognuno sceglie la sua</option>
+                <option value="manual">Manuale per tutti</option>
+                <option value="assisted">Assistita per tutti</option>
+                <option value="full">Completa per tutti</option>
+              </select>
+            </label>
+          </section>
+        )}
+
+        <section className="panel">
+          <h2>I tuoi personaggi</h2>
+          {own.length === 0 && (
+            <p className="muted">
+              Non hai personaggi. <Link to="/new">Creane uno</Link> e poi collegalo qui.
+            </p>
+          )}
+          <ul className="inv-list">
+            {own.map((ch) => {
+              const here = ch.campaignId === campaign.id;
+              const elsewhere = !!ch.campaignId && !here;
+              return (
+                <li key={ch.id}>
+                  <label className="inv-equip">
+                    <input type="checkbox" checked={here} onChange={(e) => link(ch, e.currentTarget.checked)} />
+                    <span>{ch.name}</span>
+                  </label>
+                  {elsewhere && <span className="muted small">ora in un'altra campagna: spuntandolo lo sposti qui</span>}
+                </li>
+              );
+            })}
+          </ul>
+          <p className="muted small">Spunta un personaggio per portarlo in questa campagna: il Master e gli altri giocatori lo vedranno.</p>
+        </section>
+
+        {!isDm && campaign.memberUids.includes(user.uid) && (
+          <button className="btn btn-danger-quiet" onClick={leave}>
+            Esci dalla campagna
+          </button>
+        )}
+        {isDm && (
+          <button
+            className="btn btn-danger-quiet"
+            onClick={async () => {
+              if (!window.confirm(`Eliminare la campagna ${campaign.name}? I personaggi restano ai giocatori.`)) return;
+              await repo.deleteCampaign(campaign.id);
+              nav("/campaigns");
+            }}
+          >
+            Elimina campagna
+          </button>
+        )}
+      </div>
     </main>
   );
 }

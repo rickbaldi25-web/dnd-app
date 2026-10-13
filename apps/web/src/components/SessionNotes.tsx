@@ -102,7 +102,7 @@ export function SessionNotes({ campaignId, isDm }: { campaignId: string; isDm: b
           return (
             <li key={s.id} className={open ? "is-open" : ""}>
               <div className="row between">
-                <button className="link-btn plan-name" aria-expanded={open} onClick={() => setOpenId(open ? null : s.id)}>
+                <button className="disclosure" aria-expanded={open} onClick={() => setOpenId(open ? null : s.id)}>
                   {s.title}
                 </button>
                 <span className="muted small">

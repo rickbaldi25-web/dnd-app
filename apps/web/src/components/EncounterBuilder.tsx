@@ -8,7 +8,7 @@ const DIFFICULTY: Record<EncounterDifficulty, string> = { trivial: "Banale", eas
 const pe = (n: number) => n.toLocaleString("it-IT");
 
 /** Incontri preparati dal Master, con il conto dei PE rispetto al gruppo. I giocatori non li vedono. */
-export function EncounterBuilder({ campaignId, party }: { campaignId: string; party: CharacterData[] }) {
+export function EncounterBuilder({ campaignId, party, onLaunch }: { campaignId: string; party: CharacterData[]; onLaunch?: () => void }) {
   const { push } = useLog();
   const encounter = useEncounter(campaignId);
   const [plans, setPlans] = useState<EncounterPlan[]>([]);
@@ -43,6 +43,7 @@ export function EncounterBuilder({ campaignId, party }: { campaignId: string; pa
     repo.saveEncounter(campaignId, next.encounter).catch(failed);
     repo.saveMonsterSecrets(campaignId, next.secrets).catch(failed);
     push({ title: `${plan.name}: mostri in combattimento`, lines: plan.entries.map((e) => `${e.count} × ${e.name}`), rolls: [] });
+    onLaunch?.();
   };
 
   return (
@@ -64,7 +65,7 @@ export function EncounterBuilder({ campaignId, party }: { campaignId: string; pa
           return (
             <li key={plan.id} className={open ? "is-open" : ""}>
               <div className="row between">
-                <button className="link-btn plan-name" aria-expanded={open} onClick={() => setOpenId(open ? null : plan.id)}>
+                <button className="disclosure" aria-expanded={open} onClick={() => setOpenId(open ? null : plan.id)}>
                   {plan.name}
                 </button>
                 <span className="plan-summary">

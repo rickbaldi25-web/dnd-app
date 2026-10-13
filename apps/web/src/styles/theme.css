@@ -670,3 +670,153 @@ select option {
 .stat-block {
   border-radius: 12px;
 }
+
+/* Schede della campagna */
+.tabs {
+  display: flex;
+  gap: 0.25rem;
+  margin: 0.25rem 0 var(--gap);
+  padding: 0.25rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+}
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+.tabs button {
+  flex: 1 0 auto;
+  min-height: 44px;
+  padding: 0.4rem 1rem;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tabs button:hover {
+  color: var(--text);
+}
+.tabs button.is-on {
+  border-color: var(--accent-edge);
+  background: var(--copper);
+  color: var(--copper-ink);
+}
+.tab-panel {
+  display: grid;
+  gap: var(--gap);
+  align-content: start;
+}
+.tab-panel[hidden] {
+  display: none;
+}
+.tab-panel > * {
+  margin-bottom: 0;
+  min-width: 0;
+}
+.tab-panel > .btn {
+  justify-self: start;
+}
+.section-row {
+  margin-top: 0;
+}
+.section-row .section-title {
+  margin: 0 0.25rem;
+}
+
+/* Voci che si aprono: stessa freccia ovunque, girata quando sono aperte */
+.disclosure,
+.feature-list summary,
+.spell summary {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-height: 36px;
+  cursor: pointer;
+  list-style: none;
+}
+.feature-list summary::-webkit-details-marker,
+.spell summary::-webkit-details-marker {
+  display: none;
+}
+.disclosure {
+  flex: 1 1 12rem;
+  padding: 0.2rem 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  font-size: 1.05rem;
+  text-align: left;
+}
+.disclosure::before,
+.feature-list summary::before,
+.spell summary::before {
+  content: "";
+  flex: none;
+  align-self: center;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-right: 0.15rem;
+  border-right: 2px solid var(--heading);
+  border-bottom: 2px solid var(--heading);
+  transform: rotate(-45deg);
+  transition: transform 0.15s;
+}
+.disclosure[aria-expanded="true"]::before,
+.feature-list details[open] > summary::before,
+.spell[open] > summary::before {
+  transform: rotate(45deg);
+}
+.feature-list summary > :first-child,
+.spell summary > :first-child {
+  flex: 1;
+}
+.disclosure:hover,
+.feature-list summary:hover,
+.spell summary:hover {
+  color: var(--heading);
+}
+/* la voce aperta si stacca dalle altre */
+.plan-list > li.is-open,
+.handout-list > li.is-open,
+.feature-list details[open],
+.spell[open] {
+  margin-inline: -0.5rem;
+  padding-inline: 0.5rem;
+  border-radius: 10px;
+  background: var(--field);
+}
+@media (prefers-reduced-motion: reduce) {
+  .disclosure::before,
+  .feature-list summary::before,
+  .spell summary::before {
+    transition: none;
+  }
+}
+
+/* Mostri in iniziativa: danno e cura sempre visibili, il resto si apre con Altro */
+.init-more {
+  flex: 1 1 100%;
+  padding-top: 0.4rem;
+  border-top: 1px dashed var(--line-strong);
+}
+.more-btn::after {
+  content: "";
+  display: inline-block;
+  width: 0.4rem;
+  height: 0.4rem;
+  margin-left: 0.45rem;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: translateY(-0.15rem) rotate(45deg);
+}
+.more-btn[aria-expanded="true"]::after {
+  transform: translateY(0.05rem) rotate(-135deg);
+}

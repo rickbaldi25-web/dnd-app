@@ -144,7 +144,7 @@ export function HandoutsPanel({ campaignId, isDm, uid, party, compact = false }:
           return (
             <li key={h.id} className={open ? "is-open" : ""}>
               <div className="row between">
-                <button className="link-btn plan-name" aria-expanded={open} onClick={() => toggle(h)}>
+                <button className="disclosure" aria-expanded={open} onClick={() => toggle(h)}>
                   {h.title}
                   {isNew(h) && <span className="tag handout-new"> nuovo</span>}
                 </button>
