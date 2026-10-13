@@ -1,5 +1,5 @@
 import type { WidgetRef } from "@dnd/engine";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { AutomationSwitch } from "../components/AutomationSwitch";
 import { ChoicesPanel } from "../components/ChoicesPanel";
@@ -24,7 +24,7 @@ function Zones({ c }: { c: CharacterController }) {
       {ZONES.map(({ zone, label }) => {
         const items = refs.filter((w) => WIDGETS[w.widget]?.zone === zone);
         return (
-          <section key={zone} className={`zone zone-${zone}`} aria-label={label}>
+          <section key={zone} id={`zona-${zone}`} className={`zone zone-${zone}`} aria-label={label}>
             {items.map((w, i) => {
               const def = WIDGETS[w.widget]!;
               const Cmp = def.component;
@@ -38,6 +38,35 @@ function Zones({ c }: { c: CharacterController }) {
         );
       })}
     </>
+  );
+}
+
+/** Su telefono: barra fissa in basso per saltare alle tre zone; evidenzia quella sullo schermo. */
+function ZoneTabs() {
+  const [active, setActive] = useState<Zone>("vitals");
+  useEffect(() => {
+    const io = new IntersectionObserver(
+      (entries) => {
+        const hit = entries.find((e) => e.isIntersecting);
+        if (hit) setActive(hit.target.id.replace("zona-", "") as Zone);
+      },
+      // conta la zona che attraversa la fascia alta dello schermo
+      { rootMargin: "-20% 0px -60% 0px" },
+    );
+    for (const { zone } of ZONES) {
+      const el = document.getElementById(`zona-${zone}`);
+      if (el) io.observe(el);
+    }
+    return () => io.disconnect();
+  }, []);
+  return (
+    <nav className="tabbar" aria-label="Sezioni della scheda">
+      {ZONES.map(({ zone, label }) => (
+        <a key={zone} href={`#zona-${zone}`} className={active === zone ? "is-on" : ""} aria-current={active === zone ? "true" : undefined}>
+          {label}
+        </a>
+      ))}
+    </nav>
   );
 }
 
@@ -135,6 +164,7 @@ export function Sheet() {
         )}
 
         <Zones c={c} />
+        <ZoneTabs />
 
         <ProposalDialog c={c} />
         <LevelUpDialog c={c} open={lvlOpen} onClose={() => setLvlOpen(false)} />

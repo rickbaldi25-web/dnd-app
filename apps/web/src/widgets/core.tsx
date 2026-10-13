@@ -28,7 +28,7 @@ import type { WidgetProps } from "./registry";
 /** Modalità "Correggi valori": i numeri diventano campi che impostano un override. */
 export const EditModeContext = createContext(false);
 
-function Panel({ title, children, aside, className = "" }: { title?: string; children: React.ReactNode; aside?: React.ReactNode; className?: string }) {
+export function Panel({ title, children, aside, className = "" }: { title?: string; children: React.ReactNode; aside?: React.ReactNode; className?: string }) {
   return (
     <section className={`panel ${className}`}>
       {(title || aside) && (
@@ -207,6 +207,9 @@ export function CombatStatsWidget({ c }: WidgetProps) {
   );
 }
 
+/** Oltre questo massimo i pallini non si contano più a colpo d'occhio: si passa a un contatore. */
+const PIPS_MAX = 12;
+
 export function ResourceWidget({ c, w }: WidgetProps) {
   const r = c.sheet.resources.find((x) => x.id === w.ref);
   if (!r) return null;
@@ -216,19 +219,38 @@ export function ResourceWidget({ c, w }: WidgetProps) {
   const recovery = [r.shortRest ? `riposo breve (${r.shortRest === "all" ? "tutti" : `+${r.shortRest}`})` : "", "riposo lungo (tutti)"].filter(Boolean).join(" e ");
   return (
     <Panel className={`resource-panel accent-${accent}`} title={r.name} aside={<span className="muted">{r.remaining}/{r.max}</span>}>
-      <div className="pips" role="group" aria-label={`${r.name}: ${r.remaining} su ${r.max}`}>
-        {Array.from({ length: r.max }, (_, i) => {
-          const filled = i < r.remaining;
-          return (
-            <button
-              key={i}
-              className={`pip ${filled ? "is-filled" : ""}`}
-              aria-label={filled ? `Spendi (resta ${i})` : `Recupera (arriva a ${i + 1})`}
-              onClick={() => setRemaining(filled ? i : i + 1)}
-            />
-          );
-        })}
-      </div>
+      {r.max > PIPS_MAX ? (
+        <div className="counter">
+          <button className="btn" aria-label="Spendi 1" disabled={r.remaining <= 0} onClick={() => setRemaining(r.remaining - 1)}>
+            −
+          </button>
+          <input
+            type="number"
+            min={0}
+            max={r.max}
+            value={r.remaining}
+            aria-label={`${r.name}: rimasti su ${r.max}`}
+            onChange={(e) => setRemaining(Math.max(0, Math.min(r.max, Number(e.currentTarget.value) || 0)))}
+          />
+          <button className="btn" aria-label="Recupera 1" disabled={r.remaining >= r.max} onClick={() => setRemaining(r.remaining + 1)}>
+            +
+          </button>
+        </div>
+      ) : (
+        <div className="pips" role="group" aria-label={`${r.name}: ${r.remaining} su ${r.max}`}>
+          {Array.from({ length: r.max }, (_, i) => {
+            const filled = i < r.remaining;
+            return (
+              <button
+                key={i}
+                className={`pip ${filled ? "is-filled" : ""}`}
+                aria-label={filled ? `Spendi (resta ${i})` : `Recupera (arriva a ${i + 1})`}
+                onClick={() => setRemaining(filled ? i : i + 1)}
+              />
+            );
+          })}
+        </div>
+      )}
       <p className="muted small">Recupero con {recovery}</p>
     </Panel>
   );
@@ -338,30 +360,103 @@ export function DeathSavesWidget({ c }: WidgetProps) {
 /* Gioco                                                               */
 /* ------------------------------------------------------------------ */
 
+/** Un'azione di classe, con i campi per ciò che il giocatore deve decidere (quanti punti, quali slot). */
+function ActionRow({ c, a }: { c: CharacterController; a: CharacterController["sheet"]["actions"][number] }) {
+  const [amount, setAmount] = useState(1);
+  const [slots, setSlots] = useState<Record<string, number>>({});
+  const [slotLevel, setSlotLevel] = useState(1);
+  const res = a.cost ? c.sheet.resources.find((r) => r.id === a.cost!.resource) : undefined;
+  const pools = c.sheet.spellcasting?.slots ?? [];
+  const kind = a.outcome?.kind;
+  const maxLevel = a.outcome?.kind === "recoverSlots" ? (a.outcome.maxLevel ?? 9) : 9;
+  const spent = pools.filter((p) => p.spent > 0 && p.level <= maxLevel);
+  const levels = a.outcome?.kind === "resourceToSlot" ? a.outcome.costs.map((_, i) => i + 1) : pools.filter((p) => p.remaining > 0).map((p) => p.level);
+  const use = () => {
+    c.act(runAction(c.ch, registry, a.id, undefined, { amount, slots, slotLevel }));
+    setSlots({});
+  };
+  return (
+    <li className={a.available ? "" : "is-unavailable"}>
+      <div>
+        <strong>{a.name}</strong>
+        <span className="muted small">
+          {" "}
+          {[TIMING[a.timing], res ? `${res.name} ${res.remaining}/${res.max}` : "", a.roll?.dice ?? ""].filter(Boolean).join(", ")}
+        </span>
+        {a.description && <p className="small muted">{a.description}</p>}
+        {a.cost?.variable && (
+          <label className="action-param small">
+            Quanti punti{" "}
+            <input type="number" min={1} max={res?.remaining ?? 1} value={amount} onChange={(e) => setAmount(Number(e.currentTarget.value) || 1)} />
+          </label>
+        )}
+        {kind === "recoverSlots" &&
+          (spent.length ? (
+            <div className="action-param small">
+              Slot da recuperare:
+              {spent.map((p) => (
+                <label key={p.level}>
+                  {" "}
+                  {p.level}°{" "}
+                  <input
+                    type="number"
+                    min={0}
+                    max={p.spent}
+                    value={slots[String(p.level)] ?? 0}
+                    onChange={(e) => setSlots({ ...slots, [String(p.level)]: Math.max(0, Math.min(p.spent, Number(e.currentTarget.value) || 0)) })}
+                  />
+                </label>
+              ))}
+            </div>
+          ) : (
+            <p className="small muted">Nessuno slot speso da recuperare.</p>
+          ))}
+        {(kind === "slotToResource" || kind === "resourceToSlot") && levels.length > 0 && (
+          <label className="action-param small">
+            Slot di livello{" "}
+            <select value={slotLevel} onChange={(e) => setSlotLevel(Number(e.currentTarget.value))}>
+              {levels.map((l) => (
+                <option key={l} value={l}>
+                  {l}°
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+      </div>
+      <button className="btn" onClick={use}>
+        Usa
+      </button>
+    </li>
+  );
+}
+
 export function ActionsWidget({ c }: WidgetProps) {
+  const { push } = useLog();
   const actions = c.sheet.actions.filter((a) => a.outcome?.kind !== "toggleOn" && a.outcome?.kind !== "toggleOff");
-  if (!actions.length) return null;
+  const dice = c.sheet.dice;
+  if (!actions.length && !dice.length) return null;
+  const rollDice = (d: (typeof dice)[number]) => {
+    const r = roll(d.expr);
+    push({ title: d.name, lines: d.damageType ? [DAMAGE_TYPES[d.damageType] ?? d.damageType] : [], rolls: [{ label: d.name, expr: d.expr, dice: r.rolls.map((x) => x.value), total: r.total }] });
+  };
   return (
     <Panel title="Azioni di classe">
       <ul className="action-list">
-        {actions.map((a) => {
-          const res = a.cost ? c.sheet.resources.find((r) => r.id === a.cost!.resource) : undefined;
-          return (
-            <li key={a.id} className={a.available ? "" : "is-unavailable"}>
-              <div>
-                <strong>{a.name}</strong>
-                <span className="muted small">
-                  {" "}
-                  {[TIMING[a.timing], res ? `${res.name} ${res.remaining}/${res.max}` : "", a.roll?.dice ?? ""].filter(Boolean).join(", ")}
-                </span>
-                {a.description && <p className="small muted">{a.description}</p>}
-              </div>
-              <button className="btn" onClick={() => c.act(runAction(c.ch, registry, a.id))}>
-                Usa
-              </button>
-            </li>
-          );
-        })}
+        {dice.map((d) => (
+          <li key={d.id}>
+            <div>
+              <strong>{d.name}</strong> <span className="muted small">{d.expr}</span>
+              {d.note && <p className="small muted">{d.note}</p>}
+            </div>
+            <button className="btn" onClick={() => rollDice(d)}>
+              Tira
+            </button>
+          </li>
+        ))}
+        {actions.map((a) => (
+          <ActionRow key={a.id} c={c} a={a} />
+        ))}
       </ul>
     </Panel>
   );

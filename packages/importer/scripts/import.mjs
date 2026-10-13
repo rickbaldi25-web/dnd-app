@@ -48,6 +48,8 @@ for (const [cls, subs] of Object.entries(stats.subclasses)) console.log(`  ${cls
 const unmapped = Object.entries(stats.unmappedModifiers).sort((a, b) => b[1] - a[1]);
 console.log(`Modificatori da codificare a mano: ${unmapped.reduce((a, [, v]) => a + v, 0)} (${unmapped.length} tipi)`);
 for (const w of stats.warnings) console.log("Attenzione:", w);
+console.log(`Meccaniche: ${stats.mechanics.applied} privilegi, ${stats.mechanics.subclassSpells} incantesimi di sottoclasse`);
+for (const m of stats.mechanics.missing) console.log("Attenzione: meccanica senza privilegio corrispondente:", m);
 const applied = Object.entries(translated.applied).map(([k, v]) => `${k} ${v}`).join(", ");
 console.log(`Traduzioni: ${applied || "nessuna"} (${translationFiles.length} file)`);
 for (const m of translated.missing) console.log("Attenzione: traduzione senza voce corrispondente:", m);

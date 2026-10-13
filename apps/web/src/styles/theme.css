@@ -1,0 +1,320 @@
+/*
+ * Veste "pergamena": si carica dopo app.css e ne ridisegna l'aspetto senza
+ * cambiarne la struttura. Colori e caratteri stanno in tokens.css.
+ */
+
+body {
+  background: var(--bg);
+  /* cifre allineate e a larghezza fissa: Alegreya di suo le ha "antiche" */
+  font-feature-settings: "lnum" 1, "tnum" 1;
+  line-height: 1.4;
+}
+
+/*
+ * Sfondo vivo: due veli di luce che scivolano lenti in direzioni opposte, come
+ * il riflesso di una candela. Si anima solo transform, così resta fluido anche
+ * sui telefoni meno recenti; con "riduci movimento" attivo resta fermo (app.css).
+ */
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  inset: -30%;
+  z-index: -1;
+  background: var(--wash);
+  pointer-events: none;
+  will-change: transform;
+  animation: wash-drift 24s ease-in-out infinite alternate;
+}
+body::after {
+  opacity: 0.6;
+  animation-name: wash-counter;
+  animation-duration: 34s;
+}
+@keyframes wash-drift {
+  from {
+    transform: translate3d(-6%, -4%, 0) rotate(-4deg) scale(1);
+  }
+  to {
+    transform: translate3d(7%, 6%, 0) rotate(7deg) scale(1.15);
+  }
+}
+@keyframes wash-counter {
+  from {
+    transform: translate3d(8%, 5%, 0) rotate(184deg) scale(1.1);
+  }
+  to {
+    transform: translate3d(-7%, -6%, 0) rotate(170deg) scale(0.95);
+  }
+}
+
+/* ---------------- Titoli ---------------- */
+
+.brand,
+.page-title,
+.login-title,
+.sheet-title h1,
+.panel h2,
+.panel h3,
+.dialog h2,
+.automation legend {
+  font-family: var(--font-title);
+  font-style: normal;
+  font-weight: 700;
+  color: var(--heading);
+}
+.brand {
+  font-size: var(--step-0);
+  letter-spacing: 0.03em;
+}
+.page-title {
+  font-size: var(--step-2);
+  letter-spacing: 0.02em;
+}
+.sheet-title h1 {
+  font-size: clamp(1.7rem, 6vw, 2.5rem);
+  line-height: 1.08;
+  letter-spacing: 0.01em;
+}
+.login-title {
+  font-size: clamp(2rem, 8vw, 3rem);
+}
+.panel h2,
+.panel h3,
+.automation legend {
+  font-size: 0.95rem;
+  letter-spacing: 0.05em;
+}
+.char-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+}
+
+/* Numeri grandi in Alegreya */
+.hp-current,
+.hp-max,
+.combat-grid dd,
+.ability-mod,
+.log-total,
+.stat-number,
+.char-hp {
+  font-family: var(--font-display);
+}
+
+/* ---------------- Fogli ---------------- */
+
+.panel,
+.char-card,
+.dialog,
+.log-entry,
+.problems {
+  background: var(--edge), var(--panel);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow);
+}
+/* doppio filetto, come le cornici dei manuali */
+.panel,
+.dialog {
+  outline: 1px solid var(--line);
+  outline-offset: -5px;
+}
+.panel:focus-visible,
+.dialog:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.panel-head {
+  /* filetto che si assottiglia, come nei blocchi statistiche */
+  border-bottom: 2px solid;
+  border-image: linear-gradient(90deg, var(--rule), transparent) 1;
+}
+.problems {
+  border-left: 3px solid var(--gold);
+}
+.log-entry {
+  background: var(--edge), var(--panel-raised);
+  border-left-width: 4px;
+}
+.dialog::backdrop {
+  background: rgba(20, 12, 5, 0.65);
+}
+.choices-panel {
+  border-color: var(--rule);
+}
+.toggle-panel.is-active {
+  border-color: var(--stroke);
+  box-shadow: 0 0 0 2px var(--accent, var(--copper)), var(--shadow);
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--panel);
+  border-bottom: 1px solid var(--stroke);
+  box-shadow: var(--shadow);
+}
+
+/* ---------------- Controlli ---------------- */
+
+.btn {
+  border-color: var(--stroke);
+  background: var(--field);
+  font-weight: 700;
+}
+.btn-primary {
+  background: var(--copper);
+  border-color: var(--accent-edge);
+  color: var(--copper-ink);
+}
+.btn-danger {
+  border-color: color-mix(in srgb, var(--blood) 55%, transparent);
+  background: color-mix(in srgb, var(--blood) 12%, var(--field));
+}
+.btn-heal {
+  border-color: color-mix(in srgb, var(--verdigris) 55%, transparent);
+  background: color-mix(in srgb, var(--verdigris) 12%, var(--field));
+}
+.btn-quiet,
+.btn-danger-quiet {
+  border-color: transparent;
+  background: transparent;
+}
+.icon-btn {
+  border-color: var(--stroke);
+  background: var(--field);
+}
+
+/* L'oro come testo non si legge sulla pergamena: i collegamenti usano il colore dei titoli */
+.link-btn,
+.boost {
+  color: var(--heading);
+}
+
+input,
+select,
+textarea {
+  background: var(--field);
+}
+select option {
+  background: var(--panel-raised);
+  color: var(--text);
+}
+
+.segmented {
+  border-color: var(--stroke);
+  background: var(--field);
+}
+.segmented .is-on {
+  box-shadow: inset 0 0 0 1px var(--accent-edge);
+}
+
+.chip {
+  border-style: solid;
+  border-color: var(--line-strong);
+}
+.chip.is-on {
+  background: var(--copper);
+  border-color: var(--accent-edge);
+  color: var(--copper-ink);
+}
+
+.mastery.is-active {
+  background: var(--copper);
+  border-color: var(--accent-edge);
+  color: var(--copper-ink);
+  font-weight: 700;
+}
+
+/* Risorse: pieno e vuoto si distinguono anche senza colore */
+.pip {
+  border-color: color-mix(in srgb, var(--text) 45%, transparent);
+}
+.pip.is-filled {
+  border-color: color-mix(in srgb, var(--accent, var(--copper)) 50%, var(--text));
+}
+
+.toggle-track {
+  border: 1px solid var(--line-strong);
+  background: var(--field);
+}
+.toggle-thumb {
+  top: 4px;
+  left: 4px;
+}
+.toggle[aria-checked="true"] .toggle-track {
+  border-color: color-mix(in srgb, var(--accent, var(--copper)) 50%, var(--text));
+}
+.toggle[aria-checked="true"] .toggle-thumb {
+  background: var(--copper-ink);
+}
+
+.prof-dot.is-expert {
+  background: var(--heading);
+  border-color: var(--heading);
+  box-shadow: 0 0 0 2px var(--panel), 0 0 0 3.5px var(--heading);
+}
+
+.combat-ac dd,
+.ability {
+  background: var(--field);
+}
+.ability-score {
+  background: var(--panel-raised);
+}
+
+/* ---------------- Tema ---------------- */
+
+.theme-btn {
+  min-height: 36px;
+  padding: 0.2rem 0.7rem;
+  font-size: var(--step--1);
+}
+
+/* ---------------- Scheda su telefono: barra delle zone ---------------- */
+
+.zone {
+  scroll-margin-top: 4.5rem;
+}
+.tabbar {
+  display: none;
+}
+@media (max-width: 699px) {
+  .tabbar {
+    position: fixed;
+    right: 12px;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    left: 12px;
+    z-index: 9;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+    padding: 5px;
+    border: 1px solid var(--stroke);
+    border-radius: var(--radius-panel);
+    background: var(--panel-raised);
+    box-shadow: var(--shadow);
+  }
+  .tabbar a {
+    display: grid;
+    place-items: center;
+    min-height: 44px;
+    border-radius: var(--radius);
+    color: inherit;
+    font-weight: 700;
+    text-decoration: none;
+  }
+  .tabbar a.is-on {
+    background: var(--copper);
+    color: var(--copper-ink);
+    box-shadow: inset 0 0 0 1px var(--accent-edge);
+  }
+  /* i tiri compaiono sopra la barra, non sotto */
+  body:has(.tabbar) .log-stack {
+    bottom: calc(max(12px, env(safe-area-inset-bottom)) + 66px);
+  }
+  .sheet {
+    padding-bottom: 8rem;
+  }
+}

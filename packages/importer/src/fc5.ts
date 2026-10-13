@@ -28,6 +28,7 @@ import type {
   Value,
   WeaponProperty,
 } from "@dnd/engine";
+import { applyMechanics, type MechanicsReport } from "./mechanics.ts";
 import { kid, kids, parseXml, val, type XmlNode } from "./xml.ts";
 
 /* ------------------------------------------------------------------ */
@@ -147,6 +148,8 @@ export interface ImportStats {
   unmappedModifiers: Record<string, number>;
   subclasses: Record<string, string[]>;
   warnings: string[];
+  /** Meccaniche codificate a mano applicate al pacchetto. */
+  mechanics?: MechanicsReport;
 }
 
 interface Ctx {
@@ -392,8 +395,16 @@ function importClass(n: XmlNode, ctx: Ctx, usedClassIds: Set<string>): { cls: Cl
       values.push(cur);
     }
     if (values.every((v) => v === 0)) continue;
+    // Il proprietario si cerca per nome: nel compendio il contatore può stare in un livello che ha altri privilegi.
+    const candidates = [...classFeatures, ...[...subFeatures.values()].flat(), ...options.map((o) => o.feature)];
+    const optionName = (f: Feature) => f.name.replace(/^.*?: /, "");
     const ownerRaw = rows.find((r) => r.owner && built.has(r.owner))?.owner;
-    const owner = (ownerRaw && built.get(ownerRaw)) ?? classFeatures.find((f) => f.name === cname) ?? classFeatures[0];
+    const owner =
+      candidates.find((f) => f.name === cname) ??
+      candidates.find((f) => f.name.startsWith(`${cname} (`) || optionName(f) === cname || optionName(f).startsWith(`${cname} (`)) ??
+      candidates.find((f) => f.description?.includes(cname)) ??
+      (ownerRaw && built.get(ownerRaw)) ??
+      classFeatures[0];
     if (!owner) continue;
     const id = `${classId}.${slug(cname)}`;
     owner.resources = [
@@ -740,6 +751,79 @@ function importMonster(n: XmlNode, ctx: Ctx, used: Set<string>): MonsterDef {
 
 /* ------------------------------------------------------------------ */
 
+/** Valori per livello 1-20 a partire dalle soglie: steps({ 3: 2, 10: 3 }) = 0, 0, 2, 2, ... 3, ... */
+function steps(at: Record<number, number>): number[] {
+  const out: number[] = [];
+  for (let lv = 1, cur = 0; lv <= 20; lv++) out.push((cur = at[lv] ?? cur));
+  return out;
+}
+
+/**
+ * Quante opzioni si scelgono, per livello di classe: il compendio non lo dice in forma strutturata.
+ * "list" indica le opzioni che il compendio registra come incantesimi di una lista fittizia:
+ * diventano opzioni del privilegio, come gli stili di combattimento.
+ */
+const OPTION_RULES: { feature: string; by: string; count: Record<number, number>; list?: string; prefix?: RegExp }[] = [
+  { feature: "sorcerer.metamagic", by: "sorcerer", count: { 3: 2, 10: 3, 17: 4 } },
+  { feature: "warlock.eldritch-invocations", by: "warlock", count: { 2: 2, 5: 3, 7: 4, 9: 5, 12: 6, 15: 7, 18: 8 }, list: "eldritch-invocations", prefix: /^Invocation:\s*/ },
+  { feature: "artificer.infuse-item", by: "artificer", count: { 2: 4, 6: 6, 10: 8, 14: 10, 18: 12 }, list: "artificer-infusions", prefix: /^Infusion:\s*/ },
+  { feature: "fighter.battle-master.combat-superiority", by: "fighter", count: { 3: 3, 7: 5, 10: 7, 15: 9 }, list: "maneuvers" },
+  { feature: "fighter.arcane-archer.arcane-shot", by: "fighter", count: { 3: 2, 7: 3, 10: 4, 15: 5, 18: 6 }, list: "fighter.arcane-archer" },
+  // Sintonia Elementale più una disciplina al 3° livello, poi una in più a ogni soglia.
+  { feature: "monk.way-of-the-four-elements.disciple-of-the-elements", by: "monk", count: { 3: 2, 6: 3, 11: 4, 17: 5 }, list: "monk.way-of-the-four-elements" },
+];
+
+function applyOptionRules(pack: ContentPack, stats: ImportStats) {
+  const features = [...(pack.classes ?? []), ...(pack.subclasses ?? [])].flatMap((c) => c.features);
+  for (const rule of OPTION_RULES) {
+    const parent = features.find((f) => f.id === rule.feature);
+    if (!parent) continue; // compendio senza quella classe
+    const tag = `opt:${parent.id}`;
+    const count: Value = { table: { by: rule.by, values: steps(rule.count) } };
+    const existing = parent.choices?.find((c) => c.from && !Array.isArray(c.from) && c.from.tag === tag);
+    if (existing) existing.count = count;
+    else parent.choices = [...(parent.choices ?? []), { id: parent.id, kind: "feat", label: parent.name, count, from: { tag } }];
+    if (!rule.list) continue;
+    const moved = (pack.spells ?? []).filter((s) => s.lists.includes(rule.list!));
+    pack.spells = (pack.spells ?? []).filter((s) => !moved.includes(s));
+    for (const s of moved) {
+      // "Infusion: Helm of Awareness (Level 10)" -> nome pulito e livello minimo.
+      let name = rule.prefix ? s.name.replace(rule.prefix, "") : s.name;
+      const inName = name.match(/\s*\(Level (\d+)\)$/);
+      if (inName) name = name.slice(0, inName.index);
+      const prereq = s.description.match(/^Prerequisite:\s*(.+)$/m)?.[1];
+      const level = Number(inName?.[1] ?? prereq?.match(/(\d+)(?:st|nd|rd|th) level/)?.[1]) || 0;
+      const id = `${parent.id}.${slug(name)}`;
+      (pack.feats ??= []).push({
+        id,
+        name,
+        category: "option",
+        tags: [tag],
+        ...(prereq ? { prerequisiteText: prereq } : {}),
+        ...(level ? { prerequisites: { minLevel: { by: rule.by, level } } } : {}),
+        feature: { id: `feat.${id}`, name: `${parent.name}: ${name}`, description: s.description },
+      });
+    }
+    stats.counts[`options:${rule.list}`] = moved.length;
+  }
+}
+
+/**
+ * Il compendio ripete alcuni incantesimi in una seconda voce che serve solo ad aggiungere liste
+ * (di dominio, di giuramento...): resta la prima voce, con le liste di tutte.
+ */
+function mergeSameName(spells: SpellDef[]): SpellDef[] {
+  const byName = new Map<string, SpellDef>();
+  for (const s of spells) {
+    // La voce ripetuta porta un asterisco in fondo al nome.
+    const name = s.name.replace(/\*+$/, "").trim();
+    const first = byName.get(name);
+    if (first) first.lists = [...new Set([...first.lists, ...s.lists])];
+    else byName.set(name, s);
+  }
+  return [...byName.values()];
+}
+
 export interface ImportOptions {
   id: string;
   name: string;
@@ -782,9 +866,11 @@ export function importCompendium(xml: string, opts: ImportOptions): { pack: Cont
     feats,
     items: each("item", importItem),
     skills: SKILLS_2014,
-    spells: each("spell", importSpell),
+    spells: mergeSameName(each("spell", importSpell)),
     monsters: each("monster", importMonster),
   };
+  applyOptionRules(pack, stats);
+  stats.mechanics = applyMechanics(pack);
   for (const k of ["classes", "subclasses", "species", "backgrounds", "feats", "items", "spells", "monsters"] as const) stats.counts[k] = pack[k]?.length ?? 0;
   return { pack, stats };
 }

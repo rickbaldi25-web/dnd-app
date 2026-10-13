@@ -1045,3 +1045,112 @@ body:has(.sheet.is-raging) {
     transition: none !important;
   }
 }
+
+/* Celle il cui widget non ha nulla da mostrare */
+.cell:empty {
+  display: none;
+}
+
+/* Incantesimi */
+.spell-source + .spell-source {
+  margin-top: 0.5rem;
+}
+.spell-source p {
+  margin: 0;
+}
+.slots {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0.9rem 0;
+  padding: 0.75rem 0;
+  border-block: 1px solid var(--line);
+}
+.slot-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.slot-label {
+  min-width: 5.5rem;
+  font-weight: 700;
+}
+.pip-small {
+  width: 26px;
+  height: 26px;
+}
+.concentration {
+  padding: 0.5rem 0.75rem;
+  border-left: 3px solid var(--gold);
+  background: color-mix(in srgb, var(--gold) 12%, transparent);
+}
+.spell-level h3 {
+  margin: 1rem 0 0.25rem;
+}
+.spell summary {
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.spell-text {
+  max-width: 72ch;
+  white-space: pre-line;
+  color: var(--muted);
+}
+.spell-picker {
+  margin: 0.5rem 0 1rem;
+  padding: 0.75rem;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
+}
+.spell-filters {
+  margin-top: 0.25rem;
+}
+.spell-filters input {
+  flex: 1 1 12rem;
+}
+.spell-options {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  max-height: 26rem;
+  overflow-y: auto;
+}
+.spell-options li {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.6rem;
+  align-items: start;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.spell-options input[type="checkbox"] {
+  min-height: 0;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: 0.15rem;
+}
+
+/* Risorse con molti punti: contatore al posto dei pallini */
+.counter {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.counter input {
+  width: 5rem;
+  text-align: center;
+  font-size: var(--step-1);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Campi di un'azione (punti da spendere, slot da recuperare) */
+.action-param {
+  display: block;
+  margin-top: 0.4rem;
+}
+.action-param input,
+.action-param select {
+  width: 4.5rem;
+  min-height: 36px;
+}

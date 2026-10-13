@@ -1,4 +1,5 @@
 import { BrowserRouter, Route, Routes } from "react-router";
+import { ThemeSwitch } from "./components/ThemeSwitch";
 import { AuthProvider, useAuth } from "./firebase/auth";
 import { Characters } from "./pages/Characters";
 import { Login } from "./pages/Login";
@@ -14,6 +15,7 @@ function TopBar() {
         Schede & Sessioni
       </a>
       <span className="topbar-user">
+        <ThemeSwitch />
         {localMode ? (
           <span className="muted small" title="Senza Firebase: i dati restano in questo browser">Modalità locale</span>
         ) : (

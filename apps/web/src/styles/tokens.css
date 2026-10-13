@@ -1,77 +1,112 @@
 /*
- * Direzione visiva: "cianotipia". Le mappe dei dungeon si disegnano su carta
- * millimetrata; qui la scheda è una cianografia: blu di Prussia, linee a gesso,
- * tre colori di lavoro (rame = risorse, sangue = danno, verderame = cura).
- * Quando il personaggio entra in Ira, le linee della griglia si fanno rosse.
+ * Direzione visiva: "pergamena". Di giorno la scheda è un foglio di pergamena
+ * con inchiostro bruno e titoli rosso manuale; di notte è cuoio scuro a lume di
+ * candela. Tre colori di lavoro: oro antico = risorse e pulsanti, sangue = danno,
+ * verde = cura. L'oro non è mai colore del testo nel tema chiaro.
+ *
+ * I nomi --copper e --verdigris restano dal tema precedente: --copper è l'accento.
  */
 :root {
-  --font-display: "IM Fell English", "Iowan Old Style", Georgia, serif;
-  --font-body: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-title: "Cinzel", "Trajan Pro", Georgia, serif;
+  --font-display: "Alegreya", "Iowan Old Style", Georgia, serif;
+  --font-body: "Alegreya Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
 
-  --step--1: 0.84rem;
-  --step-0: 1rem;
-  --step-1: 1.2rem;
-  --step-2: 1.5rem;
+  --step--1: 0.88rem;
+  --step-0: 1.0625rem;
+  --step-1: 1.25rem;
+  --step-2: 1.55rem;
   --step-3: 2.1rem;
-  --step-4: 3.4rem;
+  --step-4: 3.2rem;
 
-  --radius: 6px;
+  --radius: 8px;
+  --radius-panel: 10px;
   --gap: 0.75rem;
   --pad: 1rem;
 
+  /* Accento: oro antico (il giallo Pantone è stato scartato: stonava con la pergamena) */
+  --copper: #d9a520;
+  --copper-ink: #1c1800;
+
   /* Tema notte (predefinito) */
-  --bg: #173a57;
-  --bg-grid: rgba(233, 240, 244, 0.06);
-  --panel: #1d4565;
-  --panel-raised: #24527a;
-  --text: #e9f0f4;
-  --muted: #a9c0d1;
-  --line: rgba(233, 240, 244, 0.24);
-  --line-strong: rgba(233, 240, 244, 0.5);
-  --copper: #d89150;
-  --copper-ink: #1b2f40;
-  --blood: #e0675a;
-  --verdigris: #63bfa4;
-  --gold: #e6c56f;
-  --focus: #f3d98b;
+  --bg: #15100c;
+  --bg-grid: transparent;
+  --wash:
+    radial-gradient(70% 34% at 85% 0%, color-mix(in srgb, var(--copper) 16%, transparent), transparent 70%),
+    radial-gradient(60% 30% at 0% 45%, rgba(140, 40, 20, 0.24), transparent 70%),
+    radial-gradient(60% 30% at 100% 90%, rgba(120, 80, 30, 0.22), transparent 70%);
+  --panel: #241b13;
+  --panel-raised: #2e2319;
+  --edge: radial-gradient(120% 90% at 50% 50%, transparent 55%, rgba(0, 0, 0, 0.3) 100%);
+  --field: rgba(240, 228, 200, 0.06);
+  --text: #f0e4c8;
+  --muted: #bcab8b;
+  --heading: #e6c878;
+  --rule: #b08a3c;
+  --stroke: #6e5631;
+  --line: rgba(240, 228, 200, 0.14);
+  --line-strong: rgba(240, 228, 200, 0.36);
+  --shadow: 0 14px 28px -16px rgba(0, 0, 0, 0.9);
+  --accent-edge: transparent;
+  --blood: #f0705f;
+  --verdigris: #5fcf9d;
+  --gold: #e6c878;
+  --focus: #e6c878;
   color-scheme: dark;
 }
 
-/* Tema carta: stessa pianta, stampata in chiaro */
+/* Tema pergamena: scelto dal dispositivo, a meno che l'utente non forzi lo scuro */
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
-    --bg: #e3edf2;
-    --bg-grid: rgba(23, 58, 87, 0.07);
-    --panel: #f2f7f9;
-    --panel-raised: #ffffff;
-    --text: #15344d;
-    --muted: #4c6a80;
-    --line: rgba(23, 58, 87, 0.22);
-    --line-strong: rgba(23, 58, 87, 0.5);
-    --copper: #b06a2a;
-    --copper-ink: #ffffff;
-    --blood: #b8382c;
-    --verdigris: #2c8a6f;
-    --gold: #9a7414;
-    --focus: #b06a2a;
+    --bg: #e2d1ab;
+    --wash:
+      radial-gradient(120% 50% at 50% 0%, rgba(255, 248, 225, 0.75), transparent 65%),
+      radial-gradient(40% 20% at 92% 42%, rgba(150, 100, 40, 0.2), transparent 70%),
+      radial-gradient(45% 22% at 4% 76%, rgba(150, 100, 40, 0.18), transparent 70%);
+    --panel: #f4e8cc;
+    --panel-raised: #fbf4e2;
+    --edge: radial-gradient(120% 90% at 50% 50%, transparent 60%, rgba(140, 95, 40, 0.13) 100%);
+    --field: rgba(255, 250, 235, 0.6);
+    --text: #2a1c11;
+    --muted: #5c4833;
+    --heading: #7a1c10;
+    --rule: #9c1f14;
+    --stroke: #a98a52;
+    --line: rgba(60, 40, 15, 0.2);
+    --line-strong: rgba(60, 40, 15, 0.5);
+    --shadow: 0 10px 22px -14px rgba(60, 35, 10, 0.6);
+    --copper: #b8862b;
+    --accent-edge: rgba(42, 28, 17, 0.55);
+    --blood: #9c1f14;
+    --verdigris: #1c6644;
+    --gold: #7d5200;
+    --focus: #7a1c10;
     color-scheme: light;
   }
 }
 
 :root[data-theme="light"] {
-  --bg: #e3edf2;
-  --bg-grid: rgba(23, 58, 87, 0.07);
-  --panel: #f2f7f9;
-  --panel-raised: #ffffff;
-  --text: #15344d;
-  --muted: #4c6a80;
-  --line: rgba(23, 58, 87, 0.22);
-  --line-strong: rgba(23, 58, 87, 0.5);
-  --copper: #b06a2a;
-  --copper-ink: #ffffff;
-  --blood: #b8382c;
-  --verdigris: #2c8a6f;
-  --gold: #9a7414;
-  --focus: #b06a2a;
+  --bg: #e2d1ab;
+  --wash:
+    radial-gradient(120% 50% at 50% 0%, rgba(255, 248, 225, 0.75), transparent 65%),
+    radial-gradient(40% 20% at 92% 42%, rgba(150, 100, 40, 0.2), transparent 70%),
+    radial-gradient(45% 22% at 4% 76%, rgba(150, 100, 40, 0.18), transparent 70%);
+  --panel: #f4e8cc;
+  --panel-raised: #fbf4e2;
+  --edge: radial-gradient(120% 90% at 50% 50%, transparent 60%, rgba(140, 95, 40, 0.13) 100%);
+  --field: rgba(255, 250, 235, 0.6);
+  --text: #2a1c11;
+  --muted: #5c4833;
+  --heading: #7a1c10;
+  --rule: #9c1f14;
+  --stroke: #a98a52;
+  --line: rgba(60, 40, 15, 0.2);
+  --line-strong: rgba(60, 40, 15, 0.5);
+  --shadow: 0 10px 22px -14px rgba(60, 35, 10, 0.6);
+  --copper: #b8862b;
+  --accent-edge: rgba(42, 28, 17, 0.55);
+  --blood: #9c1f14;
+  --verdigris: #1c6644;
+  --gold: #7d5200;
+  --focus: #7a1c10;
   color-scheme: light;
 }

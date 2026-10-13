@@ -19,6 +19,7 @@ import {
   SkillsWidget,
   ToggleWidget,
 } from "./core";
+import { SpellsWidget } from "./spells";
 
 export interface WidgetProps {
   c: CharacterController;
@@ -55,6 +56,7 @@ export const WIDGETS: Record<string, WidgetDef> = {
   actions: { component: ActionsWidget, zone: "play" },
   attacks: { component: AttacksWidget, zone: "play", span: 2 },
   conditions: { component: ConditionsWidget, zone: "play" },
+  spells: { component: SpellsWidget, zone: "play", span: 2 },
   "hit-dice": { component: HitDiceWidget, zone: "play" },
   abilities: { component: AbilitiesWidget, zone: "sheet", span: 2 },
   saves: { component: SavesWidget, zone: "sheet" },
@@ -65,4 +67,4 @@ export const WIDGETS: Record<string, WidgetDef> = {
 };
 
 /** Widget aggiunti dal frontend, non legati a un privilegio. */
-export const EXTRA_WIDGETS: WidgetRef[] = [{ widget: "actions" }];
+export const EXTRA_WIDGETS: WidgetRef[] = [{ widget: "actions" }, { widget: "spells" }];

@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { computeSheet, createCharacter, createRegistry, longRest, type CharacterData, type ContentPack } from "@dnd/engine";
+import { computeSheet, createCharacter, createRegistry, longRest, useAction, type CharacterData, type ContentPack } from "@dnd/engine";
 import { describe, expect, it } from "vitest";
 import { importCompendium, parseXml } from "../src/index.ts";
 
@@ -247,5 +247,82 @@ describe.skipIf(!existsSync(OFFICIAL))("Compendio ufficiale 2014", () => {
     expect(sheet("paladin", 5).spellcasting!.slots.map((p) => p.max)).toEqual([4, 2]);
     expect(sheet("warlock", 5).spellcasting!.pact).toMatchObject({ level: 3, max: 2 });
     expect(sheet("barbarian", 1).ac.value).toBe(10 + 2 + 2); // Difesa Senza Armatura: Des 14 e Cos 15 con l'umano
+  });
+});
+
+describe.skipIf(!existsSync(OFFICIAL))("Compendio ufficiale 2014: opzioni di classe e risorse", () => {
+  let pack: ContentPack;
+  const load = () => (pack ??= importCompendium(readFileSync(OFFICIAL, "utf8"), { id: "official-2014", name: "Ufficiali 2014" }).pack);
+  const features = () => [...load().classes!, ...load().subclasses!].flatMap((c) => c.features);
+  const options = (featureId: string) => load().feats!.filter((f) => f.tags?.includes(`opt:${featureId}`));
+
+  it("suppliche, manovre e infusioni sono opzioni, non incantesimi", () => {
+    expect(options("warlock.eldritch-invocations").length).toBeGreaterThan(40);
+    expect(options("fighter.battle-master.combat-superiority").length).toBeGreaterThan(15);
+    expect(options("artificer.infuse-item").length).toBeGreaterThan(10);
+    const fake = ["eldritch-invocations", "maneuvers", "artificer-infusions"];
+    expect(load().spells!.filter((s) => s.lists.some((l) => fake.includes(l)))).toEqual([]);
+    expect(load().feats!.find((f) => f.id === "warlock.eldritch-invocations.ascendant-step")).toMatchObject({
+      name: "Ascendant Step",
+      prerequisites: { minLevel: { by: "warlock", level: 9 } },
+    });
+  });
+
+  it("uno stregone di 3° livello sceglie due opzioni di Metamagia, tre al 10°", () => {
+    const reg = createRegistry(load());
+    const base = createCharacter({ id: "t", name: "Prova", speciesId: "human", backgroundId: "sage", classId: "sorcerer", abilityScores: { str: 8, dex: 14, con: 14, int: 10, wis: 12, cha: 15 } }, reg);
+    const pending = (level: number) =>
+      computeSheet({ ...base, levels: Array.from({ length: level }, () => ({ classId: "sorcerer", hp: "avg" as const })) }, reg).pendingChoices.find((p) => p.id === "sorcerer.metamagic");
+    expect(pending(2)).toBeUndefined();
+    expect(pending(3)).toMatchObject({ required: 2 });
+    expect(pending(10)).toMatchObject({ required: 3 });
+  });
+
+  it("le risorse stanno sul privilegio che le descrive", () => {
+    const owner = (resourceId: string) => [...features(), ...load().feats!.map((f) => f.feature)].find((f) => f.resources?.some((r) => r.id === resourceId))?.id;
+    expect(owner("sorcerer.sorcery-points")).toBe("sorcerer.font-of-magic");
+    expect(owner("artificer.defensive-field")).toBe("artificer.armorer.armor-model");
+    expect(owner("ranger.natures-veil")).toMatch(/natures-veil/);
+    expect(owner("warlock.accursed-specter")).toMatch(/accursed-specter/);
+  });
+});
+
+describe.skipIf(!existsSync(OFFICIAL))("Compendio ufficiale 2014: meccaniche codificate a mano", () => {
+  let reg: ReturnType<typeof createRegistry>;
+  const registry = () => (reg ??= createRegistry(importCompendium(readFileSync(OFFICIAL, "utf8"), { id: "official-2014", name: "Ufficiali 2014" }).pack));
+  const hero = (classId: string, level: number, extra: Partial<CharacterData> = {}): CharacterData => {
+    const base = createCharacter({ id: "t", name: "Prova", speciesId: "human", backgroundId: "sage", classId, abilityScores: { str: 14, dex: 14, con: 14, int: 14, wis: 14, cha: 10 } }, registry());
+    return { ...base, levels: Array.from({ length: level }, () => ({ classId, hp: "avg" as const })), ...extra };
+  };
+
+  it("Guerriero: Recuperare Energie cura, Attacco Extra, critico del Campione", () => {
+    const s = computeSheet(hero("fighter", 11, { subclasses: { fighter: "fighter.champion" } }), registry());
+    expect(s.attacksPerAction).toBe(3);
+    expect(s.critRange).toBe(19);
+    expect(s.actions.find((a) => a.id === "fighter.second-wind")).toMatchObject({ timing: "bonus", outcome: { kind: "heal" } });
+  });
+
+  it("Ladro: dadi dell'Attacco Furtivo e Maestria da scegliere", () => {
+    const s = computeSheet(hero("rogue", 5), registry());
+    expect(s.dice.find((d) => d.id === "rogue.sneak-attack")).toMatchObject({ expr: "3d6" });
+    expect(s.pendingChoices.find((p) => p.id === "rogue.expertise")).toMatchObject({ required: 2 });
+  });
+
+  it("Chierico della Vita: incantesimi di dominio sempre preparati e armature pesanti", () => {
+    const s = computeSheet(hero("cleric", 3, { subclasses: { cleric: "cleric.life-domain" } }), registry());
+    const always = s.spellcasting!.spells.filter((x) => x.always).map((x) => x.spellId);
+    expect(always).toEqual(expect.arrayContaining(["bless", "cure-wounds", "lesser-restoration", "spiritual-weapon"]));
+    expect(always).not.toContain("beacon-of-hope"); // arriva al 5° livello
+    expect(s.proficiencies.armor).toContain("heavy");
+    expect(s.actions.map((a) => a.id)).toEqual(expect.arrayContaining(["cleric.turn-undead", "cleric.preserve-life"]));
+  });
+
+  it("Mago: Recupero Arcano riporta slot per metà livello", () => {
+    const ch = hero("wizard", 4);
+    const spent = { ...ch, state: { ...ch.state, spellSlotsSpent: { "1": 2, "2": 1 } } };
+    const p = useAction(spent, registry(), "wizard.arcane-recovery", undefined, { slots: { "2": 1 } });
+    expect(p.blocked).toBeUndefined();
+    expect(p.state.spellSlotsSpent).toMatchObject({ "1": 2, "2": 0 });
+    expect(useAction(spent, registry(), "wizard.arcane-recovery", undefined, { slots: { "1": 2, "2": 1 } }).lines.join(" ")).toMatch(/2 livelli/);
   });
 });
