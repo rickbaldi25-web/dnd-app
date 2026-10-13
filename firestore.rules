@@ -5,6 +5,10 @@ rules_version = '2';
 //   characters/{id}       un personaggio; ownerUid = giocatore, campaignId opzionale
 //   campaigns/{id}        dmUid = Master, memberUids = giocatori
 //
+//   config/access         lista degli ammessi: { emails: ["a@gmail.com", ...] }. Si modifica solo dalla
+//                         console Firebase. Se il documento non esiste entra chiunque abbia fatto l'accesso
+//                         (è il caso degli emulatori); se esiste, entrano solo le email elencate.
+//
 // Il giocatore modifica solo i propri personaggi.
 // Il Master legge e modifica i personaggi della sua campagna (danni, condizioni...).
 // I membri di una campagna vedono i personaggi del gruppo.
@@ -12,8 +16,13 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    function onList() {
+      return !exists(/databases/$(database)/documents/config/access) ||
+        request.auth.token.email in get(/databases/$(database)/documents/config/access).data.emails;
+    }
+    // Tutte le regole passano da qui: senza essere nella lista non si legge né si scrive nulla.
     function signedIn() {
-      return request.auth != null;
+      return request.auth != null && onList();
     }
     function uid() {
       return request.auth.uid;

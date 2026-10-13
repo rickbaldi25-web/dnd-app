@@ -7,7 +7,7 @@
     "dev": "pnpm --filter @dnd/web dev",
     "emulators": "firebase emulators:start --project demo-dnd --import=.emulator-data --export-on-exit=.emulator-data",
     "build": "pnpm --filter @dnd/web build",
-    "deploy": "pnpm build && firebase deploy --only hosting,firestore",
+    "deploy": "pnpm build && firebase deploy --only hosting,firestore --project brock-s-dnd",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "dev:offline": "pnpm --filter @dnd/web dev:offline",

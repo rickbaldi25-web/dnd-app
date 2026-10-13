@@ -1,5 +1,6 @@
 {
   "projects": {
-    "default": "demo-dnd"
+    "default": "demo-dnd",
+    "prod": "brock-s-dnd"
   }
 }

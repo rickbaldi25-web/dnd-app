@@ -41,9 +41,22 @@ function TopBar() {
 }
 
 function Shell() {
-  const { user, loading } = useAuth();
+  const { user, loading, denied, signOut } = useAuth();
   if (loading) return <main className="page"><p className="muted">Un attimo…</p></main>;
   if (!user) return <Login />;
+  if (denied) {
+    return (
+      <main className="page narrow">
+        <h1 className="page-title">Accesso non autorizzato</h1>
+        <p>
+          L'indirizzo {user.email ?? "con cui sei entrato"} non è nella lista di chi può usare questa app. Chiedi a chi la gestisce di aggiungerti, poi riprova.
+        </p>
+        <button className="btn" onClick={signOut}>
+          Esci e cambia account
+        </button>
+      </main>
+    );
+  }
   return (
     <>
       <TopBar />
