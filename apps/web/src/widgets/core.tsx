@@ -16,7 +16,7 @@ import {
   type Stat,
 } from "@dnd/engine";
 import { createContext, useContext, useEffect, useState } from "react";
-import { ABILITY_NAMES, CONDITIONS, DAMAGE_TYPES, SENSES, TIMING, ftToM, itemName, registry } from "../content";
+import { ABILITY_NAMES, CONDITIONS, DAMAGE_TYPES, SENSES, TIMING, ftToM, isHomebrew, itemName, registry } from "../content";
 import { useLog } from "../state/log";
 import type { CharacterController } from "../state/useCharacter";
 import type { WidgetProps } from "./registry";
@@ -544,12 +544,12 @@ export function AttacksWidget({ c }: WidgetProps) {
 }
 
 export function ConditionsWidget({ c }: WidgetProps) {
-  const { conditions, exhaustion } = c.ch.state;
+  const { conditions, exhaustion, conditionRounds = {} } = c.ch.state;
   const toggle = (k: string) =>
-    c.update((ch) => ({
-      ...ch,
-      state: { ...ch.state, conditions: conditions.includes(k) ? conditions.filter((x) => x !== k) : [...conditions, k] },
-    }));
+    c.update((ch) => {
+      const { [k]: _gone, ...rounds } = ch.state.conditionRounds ?? {};
+      return { ...ch, state: { ...ch.state, conditions: conditions.includes(k) ? conditions.filter((x) => x !== k) : [...conditions, k], conditionRounds: rounds } };
+    });
   const setExh = (n: number) => c.update((ch) => ({ ...ch, state: { ...ch.state, exhaustion: Math.max(0, Math.min(6, n)) } }));
   return (
     <Panel title="Condizioni" className="conditions-panel">
@@ -557,6 +557,7 @@ export function ConditionsWidget({ c }: WidgetProps) {
         {Object.entries(CONDITIONS).map(([k, v]) => (
           <button key={k} className={`chip ${conditions.includes(k) ? "is-on" : ""}`} aria-pressed={conditions.includes(k)} onClick={() => toggle(k)}>
             {v}
+            {conditions.includes(k) && conditionRounds[k] ? ` (${conditionRounds[k]})` : ""}
           </button>
         ))}
       </div>
@@ -713,7 +714,7 @@ export function FeaturesWidget({ c }: WidgetProps) {
 
 export function InventoryWidget({ c }: WidgetProps) {
   const [add, setAdd] = useState("");
-  const items = [...registry.items.values()].filter((i) => i.kind !== "gear").sort((a, b) => a.name.localeCompare(b.name, "it"));
+  const items = [...registry.items.values()].filter((i) => i.kind !== "gear" || isHomebrew(i.id)).sort((a, b) => a.name.localeCompare(b.name, "it"));
   const setEq = (idx: number, patch: Partial<(typeof c.ch.equipment)[number]> | null) =>
     c.update((ch) => {
       const equipment = [...ch.equipment];

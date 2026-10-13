@@ -1,8 +1,9 @@
 import { computeSheet, rollD20, type CharacterData, type MonsterDef } from "@dnd/engine";
 import { useEffect, useMemo, useState } from "react";
-import { loadMonsters, registry } from "../content";
+import { CONDITIONS, loadMonsters, registry } from "../content";
 import { repo, type Encounter, type EncounterMonster, type MonsterSecret } from "../data";
 import { useLog } from "../state/log";
+import { MonsterStatBlock } from "./MonsterStatBlock";
 
 /** Una riga dell'ordine di iniziativa: un personaggio o un mostro. */
 export interface Combatant {
@@ -69,9 +70,10 @@ function InitiativeInput({ value, bonus, label, onChange }: { value: number | nu
 }
 
 /** Aggiunta di mostri: dalla raccolta importata (con ricerca) oppure scritti a mano. */
-function AddMonster({ onAdd }: { onAdd: (m: { name: string; hp: number; ac: number; bonus: number }, count: number) => void }) {
+function AddMonster({ onAdd }: { onAdd: (m: { name: string; hp: number; ac: number; bonus: number; monsterId?: string }, count: number) => void }) {
   const [library, setLibrary] = useState<MonsterDef[] | null>(null);
   const [name, setName] = useState("");
+  const [picked, setPicked] = useState<MonsterDef | undefined>();
   const [hp, setHp] = useState("");
   const [ac, setAc] = useState("");
   const [bonus, setBonus] = useState("0");
@@ -83,6 +85,7 @@ function AddMonster({ onAdd }: { onAdd: (m: { name: string; hp: number; ac: numb
   const q = name.trim().toLowerCase();
   const matches = useMemo(() => (library && q.length >= 2 ? library.filter((m) => m.name.toLowerCase().includes(q)).slice(0, 8) : []), [library, q]);
   const pick = (m: MonsterDef) => {
+    setPicked(m);
     setName(m.name);
     setHp(String(m.hp));
     setAc(String(m.ac));
@@ -107,7 +110,10 @@ function AddMonster({ onAdd }: { onAdd: (m: { name: string; hp: number; ac: numb
           className="btn"
           disabled={!name.trim()}
           onClick={() => {
-            onAdd({ name: name.trim(), hp: Math.max(1, Number(hp) || 1), ac: Number(ac) || 10, bonus: Number(bonus) || 0 }, Math.max(1, Math.min(20, Number(count) || 1)));
+            // La scheda resta collegata solo se il nome è ancora quello scelto dalla raccolta.
+            const monsterId = picked && picked.name === name.trim() ? picked.id : undefined;
+            onAdd({ name: name.trim(), hp: Math.max(1, Number(hp) || 1), ac: Number(ac) || 10, bonus: Number(bonus) || 0, monsterId }, Math.max(1, Math.min(20, Number(count) || 1)));
+            setPicked(undefined);
             setName("");
             setHp("");
             setAc("");
@@ -142,6 +148,12 @@ export function InitiativePanel({ campaignId, party, isDm, uid }: { campaignId: 
   const encounter = useEncounter(campaignId);
   const [secrets, setSecrets] = useState<Record<string, MonsterSecret>>({});
   const [damage, setDamage] = useState<Record<string, string>>({});
+  const [rounds, setRounds] = useState<Record<string, string>>({});
+  const [openSheet, setOpenSheet] = useState<string | null>(null);
+  const [library, setLibrary] = useState<MonsterDef[] | null>(null);
+  useEffect(() => {
+    if (openSheet && !library) loadMonsters().then(setLibrary).catch(() => setLibrary([]));
+  }, [openSheet, library]);
   useEffect(() => (isDm ? repo.watchMonsterSecrets(campaignId, setSecrets) : undefined), [campaignId, isDm]);
 
   const failed = (e: unknown) => push({ title: "Salvataggio non riuscito", lines: [String(e instanceof Error ? e.message : e)], tone: "bad" });
@@ -171,7 +183,35 @@ export function InitiativePanel({ campaignId, party, isDm, uid }: { campaignId: 
     if (!ready.length) return;
     const i = ready.findIndex((c) => c.id === encounter.currentId);
     const wrapped = i >= 0 && i === ready.length - 1;
-    save({ ...encounter, currentId: ready[(i + 1) % ready.length]!.id, round: encounter.round + (wrapped ? 1 : 0) });
+    let monsters = encounter.monsters;
+    if (wrapped) {
+      // Nuovo round: le condizioni a tempo perdono un round, quelle arrivate a zero finiscono.
+      const ended: string[] = [];
+      monsters = monsters.map((m) => {
+        if (!m.conditions) return m;
+        const left: Record<string, number | null> = {};
+        for (const [id, n] of Object.entries(m.conditions)) {
+          if (n === null) left[id] = null;
+          else if (n > 1) left[id] = n - 1;
+          else ended.push(`${m.name}: ${CONDITIONS[id] ?? id}`);
+        }
+        return { ...m, conditions: left };
+      });
+      for (const ch of party) {
+        const timed = ch.state.conditionRounds ?? {};
+        if (!Object.keys(timed).length) continue;
+        const left: Record<string, number> = {};
+        const gone: string[] = [];
+        for (const [id, n] of Object.entries(timed)) {
+          if (n > 1) left[id] = n - 1;
+          else gone.push(id);
+        }
+        for (const id of gone) ended.push(`${ch.name}: ${CONDITIONS[id] ?? id}`);
+        repo.updateCharacter(ch, { ...ch, state: { ...ch.state, conditions: ch.state.conditions.filter((x) => !gone.includes(x)), conditionRounds: left } }).catch(failed);
+      }
+      if (ended.length) push({ title: "Condizioni terminate", lines: ended, rolls: [] });
+    }
+    save({ ...encounter, monsters, currentId: ready[(i + 1) % ready.length]!.id, round: encounter.round + (wrapped ? 1 : 0) });
   };
   const end = () => {
     if (!window.confirm("Terminare il combattimento? Iniziative e mostri vengono azzerati.")) return;
@@ -185,7 +225,13 @@ export function InitiativePanel({ campaignId, party, isDm, uid }: { campaignId: 
     const { [id]: _gone, ...rest } = secrets;
     saveSecrets(rest);
   };
-  const addMonsters = (m: { name: string; hp: number; ac: number; bonus: number }, count: number) => {
+  const setMonsterCondition = (m: EncounterMonster, id: string, on: boolean) => {
+    const { [id]: _gone, ...rest } = m.conditions ?? {};
+    const n = Math.floor(Number(rounds[m.id]) || 0);
+    setMonster(m.id, { conditions: on ? { ...rest, [id]: n > 0 ? n : null } : rest });
+    setRounds({ ...rounds, [m.id]: "" });
+  };
+  const addMonsters = (m: { name: string; hp: number; ac: number; bonus: number; monsterId?: string }, count: number) => {
     const added: EncounterMonster[] = [];
     const nextSecrets = { ...secrets };
     const taken = encounter.monsters.filter((x) => x.name === m.name || x.name.startsWith(`${m.name} `)).length;
@@ -193,7 +239,7 @@ export function InitiativePanel({ campaignId, party, isDm, uid }: { campaignId: 
       const id = `m-${Date.now().toString(36)}-${i}`;
       // Più mostri uguali si numerano, così al tavolo si distinguono.
       added.push({ id, name: count > 1 || taken > 0 ? `${m.name} ${taken + i + 1}` : m.name, initiative: null });
-      nextSecrets[id] = { hp: m.hp, hpMax: m.hp, ac: m.ac, initiativeBonus: m.bonus };
+      nextSecrets[id] = { hp: m.hp, hpMax: m.hp, ac: m.ac, initiativeBonus: m.bonus, ...(m.monsterId ? { monsterId: m.monsterId } : {}) };
     }
     save({ ...encounter, monsters: [...encounter.monsters, ...added] });
     saveSecrets(nextSecrets);
@@ -228,6 +274,8 @@ export function InitiativePanel({ campaignId, party, isDm, uid }: { campaignId: 
           const mine = c.character?.ownerUid === uid;
           const canSet = isDm || mine;
           const secret = c.kind === "monster" ? secrets[c.id] : undefined;
+          const monster = c.kind === "monster" ? encounter.monsters.find((m) => m.id === c.id) : undefined;
+          const statBlock = openSheet === c.id && secret?.monsterId ? library?.find((m) => m.id === secret.monsterId) : undefined;
           return (
             <li key={c.id} className={`${c.id === encounter.currentId ? "is-current" : ""} ${secret && secret.hp === 0 ? "is-down" : ""}`}>
               {canSet ? (
@@ -247,6 +295,20 @@ export function InitiativePanel({ campaignId, party, isDm, uid }: { campaignId: 
               <span className="init-name">
                 {c.name}
                 {c.id === encounter.currentId && <span className="tag"> di turno</span>}
+                {monster &&
+                  Object.entries(monster.conditions ?? {}).map(([id, n]) =>
+                    isDm ? (
+                      <button key={id} className="tag tag-bad tag-btn" aria-label={`Togli ${CONDITIONS[id] ?? id} a ${c.name}`} onClick={() => setMonsterCondition(monster, id, false)}>
+                        {CONDITIONS[id] ?? id}
+                        {n ? ` (${n})` : ""} ×
+                      </button>
+                    ) : (
+                      <span key={id} className="tag tag-bad">
+                        {CONDITIONS[id] ?? id}
+                        {n ? ` (${n})` : ""}
+                      </span>
+                    ),
+                  )}
               </span>
               {isDm && secret && (
                 <span className="init-monster">
@@ -260,10 +322,29 @@ export function InitiativePanel({ campaignId, party, isDm, uid }: { campaignId: 
                   <button className="btn btn-heal" onClick={() => hit(c.id, -1)}>
                     Cura
                   </button>
+                  <input type="number" min={1} value={rounds[c.id] ?? ""} placeholder="round" title="Durata in round: vuoto = finché non la togli" aria-label={`Durata in round della condizione per ${c.name}`} className="short-input" onChange={(e) => setRounds({ ...rounds, [c.id]: e.currentTarget.value })} />
+                  <select value="" aria-label={`Aggiungi una condizione a ${c.name}`} onChange={(e) => monster && e.currentTarget.value && setMonsterCondition(monster, e.currentTarget.value, true)}>
+                    <option value="">Condizione…</option>
+                    {Object.entries(CONDITIONS)
+                      .filter(([id]) => !(monster?.conditions && id in monster.conditions))
+                      .map(([id, label]) => (
+                        <option key={id} value={id}>
+                          {label}
+                        </option>
+                      ))}
+                  </select>
+                  {secret.monsterId && (
+                    <button className="btn btn-quiet" aria-expanded={openSheet === c.id} onClick={() => setOpenSheet(openSheet === c.id ? null : c.id)}>
+                      {openSheet === c.id ? "Chiudi scheda" : "Scheda"}
+                    </button>
+                  )}
                   <button className="icon-btn" aria-label={`Togli ${c.name}`} onClick={() => removeMonster(c.id)}>
                     ×
                   </button>
                 </span>
+              )}
+              {isDm && openSheet === c.id && (
+                <div className="init-sheet">{statBlock ? <MonsterStatBlock monster={statBlock} name={c.name} /> : <p className="muted small">{library ? "Scheda non trovata nella raccolta." : "Carico la scheda…"}</p>}</div>
               )}
             </li>
           );

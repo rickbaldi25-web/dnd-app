@@ -1,12 +1,14 @@
 import { applyDamage, applyHealing, applyProposal, computeSheet, longRest, shortRest, type AutomationLevel, type CharacterData, type ComputedSheet } from "@dnd/engine";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
+import { HomebrewPanel } from "../components/Homebrew";
 import { InitiativePanel } from "../components/Initiative";
 import { RollLog } from "../components/RollLog";
 import { CONDITIONS, registry } from "../content";
 import { repo, type Campaign as CampaignData } from "../data";
 import { useAuth } from "../firebase/auth";
 import { useLog, useShareRolls } from "../state/log";
+import { useHomebrew } from "../state/homebrew";
 import { usePresence } from "../state/presence";
 
 const AUTOMATION_LABEL: Record<AutomationLevel, string> = { manual: "Manuale", assisted: "Assistita", full: "Completa" };
@@ -23,6 +25,7 @@ function sheetOf(ch: CharacterData): ComputedSheet | null {
 export function PartyCard({ ch, canEdit, mine, online, current = false }: { ch: CharacterData; canEdit: boolean; mine: boolean; online: boolean; current?: boolean }) {
   const { push } = useLog();
   const [amount, setAmount] = useState("");
+  const [rounds, setRounds] = useState("");
   const sheet = useMemo(() => sheetOf(ch), [ch]);
   if (!sheet) {
     return (
@@ -41,7 +44,17 @@ export function PartyCard({ ch, canEdit, mine, online, current = false }: { ch: 
   const slots = [...(sc?.slots ?? []).map((p) => `${p.level}° ${p.remaining}/${p.max}`), ...(sc?.pact ? [`Patto ${sc.pact.level}° ${sc.pact.remaining}/${sc.pact.max}`] : [])];
   const n = Math.max(0, Math.floor(Number(amount) || 0));
   const failed = (e: unknown) => push({ title: "Salvataggio non riuscito", lines: [String(e instanceof Error ? e.message : e)], tone: "bad" });
-  const setConditions = (conditions: string[]) => repo.updateCharacter(ch, { ...ch, state: { ...s, conditions } }).catch(failed);
+  const durations = s.conditionRounds ?? {};
+  const addCondition = (id: string) => {
+    const n = Math.floor(Number(rounds) || 0);
+    repo.updateCharacter(ch, { ...ch, state: { ...s, conditions: [...s.conditions, id], conditionRounds: n > 0 ? { ...durations, [id]: n } : durations } }).catch(failed);
+    setRounds("");
+  };
+  const removeCondition = (id: string) => {
+    const { [id]: _gone, ...rest } = durations;
+    repo.updateCharacter(ch, { ...ch, state: { ...s, conditions: s.conditions.filter((x) => x !== id), conditionRounds: rest } }).catch(failed);
+  };
+  const conditionLabel = (id: string) => `${CONDITIONS[id] ?? id}${durations[id] ? ` (${durations[id]})` : ""}`;
   const act = (kind: "damage" | "heal") => {
     const p = kind === "damage" ? applyDamage(ch, sheet, n) : applyHealing(ch, sheet, n);
     repo.updateCharacter(ch, applyProposal(ch, p)).catch((e) => push({ title: "Salvataggio non riuscito", lines: [String(e?.message ?? e)], tone: "bad" }));
@@ -76,12 +89,12 @@ export function PartyCard({ ch, canEdit, mine, online, current = false }: { ch: 
         <p className="party-tags">
           {s.conditions.map((c) =>
             canEdit ? (
-              <button key={c} className="tag tag-bad tag-btn" aria-label={`Togli ${CONDITIONS[c] ?? c}`} onClick={() => setConditions(s.conditions.filter((x) => x !== c))}>
-                {CONDITIONS[c] ?? c} ×
+              <button key={c} className="tag tag-bad tag-btn" aria-label={`Togli ${CONDITIONS[c] ?? c}`} onClick={() => removeCondition(c)}>
+                {conditionLabel(c)} ×
               </button>
             ) : (
               <span key={c} className="tag tag-bad">
-                {CONDITIONS[c] ?? c}
+                {conditionLabel(c)}
               </span>
             ),
           )}
@@ -100,7 +113,8 @@ export function PartyCard({ ch, canEdit, mine, online, current = false }: { ch: 
           <button className="btn btn-heal" disabled={!n} onClick={() => act("heal")}>
             Cura
           </button>
-          <select value="" aria-label={`Aggiungi una condizione a ${ch.name}`} onChange={(e) => e.currentTarget.value && setConditions([...s.conditions, e.currentTarget.value])}>
+          <input type="number" min={1} value={rounds} placeholder="round" title="Durata in round: vuoto = finché non la togli" aria-label={`Durata in round della condizione per ${ch.name}`} className="party-amount" onChange={(e) => setRounds(e.currentTarget.value)} />
+          <select value="" aria-label={`Aggiungi una condizione a ${ch.name}`} onChange={(e) => e.currentTarget.value && addCondition(e.currentTarget.value)}>
             <option value="">Condizione…</option>
             {Object.entries(CONDITIONS)
               .filter(([id]) => !s.conditions.includes(id))
@@ -132,6 +146,7 @@ export function Campaign() {
   const [copied, setCopied] = useState(false);
 
   const online = usePresence(id);
+  const { homebrew } = useHomebrew(id);
   const amDm = !!campaign && !!user && campaign.dmUid === user.uid;
   useShareRolls(campaign && user ? { campaignId: campaign.id, uid: user.uid, author: amDm ? "Master" : user.name, canHide: amDm } : null);
   useEffect(() => repo.watchCampaign(id, setCampaign), [id]);
@@ -252,6 +267,8 @@ export function Campaign() {
       </ul>
 
       <RollLog campaignId={campaign.id} isDm={isDm} />
+
+      <HomebrewPanel campaignId={campaign.id} homebrew={homebrew} isDm={isDm} />
 
       <section className="panel">
         <h2>I tuoi personaggi</h2>

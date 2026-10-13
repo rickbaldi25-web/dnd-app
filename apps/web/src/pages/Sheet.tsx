@@ -87,7 +87,7 @@ export function Sheet() {
 
   // I tiri fatti dalla scheda finiscono nel registro della campagna, a nome del personaggio.
   const shareCampaign = c?.ch.campaignId;
-  useShareRolls(shareCampaign && user ? { campaignId: shareCampaign, uid: user.uid, author: c.ch.name, canHide: c.ch.ownerUid !== user.uid } : null);
+  useShareRolls(shareCampaign && user ? { campaignId: shareCampaign, uid: user.uid, author: c.ch.name, canHide: c.campaignDmUid === user.uid } : null);
 
   // La scheda reagisce alla vita: da metà PF in giù le luci dello sfondo crescono (theme.css).
   const hpCur = c?.ch.state.hpCurrent;

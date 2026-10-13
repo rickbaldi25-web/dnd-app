@@ -610,6 +610,8 @@ export interface CharacterState {
   spellSlotsBonus?: Record<string, number>;
   pactSlotsSpent?: number;
   concentration?: { spellId: string; name: string } | null;
+  /** Round che restano a una condizione (chiave = id della condizione). Senza voce = finché qualcuno non la toglie. */
+  conditionRounds?: Record<string, number>;
   /** Iniziativa nel combattimento in corso: tirata dalla scheda o scritta a mano dopo il tiro al tavolo. */
   initiative?: number | null;
 }

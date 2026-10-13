@@ -10,6 +10,7 @@ import {
   FieldPath,
   limit,
   getDoc,
+  getDocs,
   onSnapshot,
   orderBy,
   query,
@@ -17,9 +18,10 @@ import {
   setDoc,
   updateDoc,
   where,
+  writeBatch,
   type Firestore,
 } from "firebase/firestore";
-import { newCampaignCode, type Campaign, type Encounter, type MonsterSecret, type Presence, type SharedRoll, type Repository, type UserPrefs } from "./repository";
+import { newCampaignCode, type Campaign, type Encounter, type Homebrew, type MonsterSecret, type Presence, type SharedRoll, type Repository, type UserPrefs } from "./repository";
 
 /** Toglie i campi tecnici di Firestore prima di passare il personaggio al motore. */
 function toCharacter(id: string, data: Record<string, unknown>): CharacterData {
@@ -122,9 +124,26 @@ export function firestoreRepo(db: Firestore): Repository {
     async saveMonsterSecrets(campaignId, secrets) {
       await setDoc(doc(db, "campaigns", campaignId, "secret", "encounter"), { monsters: secrets });
     },
+    watchHomebrew(campaignId, cb) {
+      return onSnapshot(doc(db, "campaigns", campaignId, "state", "homebrew"), (d) => cb(d.exists() ? { items: d.data().items ?? [], spells: d.data().spells ?? [] } : null), () => cb(null));
+    },
+    async saveHomebrew(campaignId, homebrew) {
+      await setDoc(doc(db, "campaigns", campaignId, "state", "homebrew"), homebrew);
+    },
     async addRoll(campaignId, roll) {
       // I tiri segreti stanno in una raccolta a parte, che le regole aprono solo al Master.
       await addDoc(collection(db, "campaigns", campaignId, roll.secret ? "secretRolls" : "rolls"), roll);
+    },
+    async clearRolls(campaignId) {
+      for (const name of ["rolls", "secretRolls"]) {
+        const snap = await getDocs(collection(db, "campaigns", campaignId, name));
+        // Un batch regge 500 scritture: si procede a blocchi.
+        for (let i = 0; i < snap.docs.length; i += 400) {
+          const batch = writeBatch(db);
+          for (const d of snap.docs.slice(i, i + 400)) batch.delete(d.ref);
+          await batch.commit();
+        }
+      }
     },
     watchRolls(campaignId, secret, cb) {
       const q = query(collection(db, "campaigns", campaignId, secret ? "secretRolls" : "rolls"), orderBy("at", "desc"), limit(30));

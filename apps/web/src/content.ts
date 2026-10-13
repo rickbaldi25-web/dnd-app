@@ -1,5 +1,5 @@
 import { srd } from "@dnd/content-srd";
-import { ABILITIES, createRegistry, type ContentPack, type MonsterDef } from "@dnd/engine";
+import { ABILITIES, createRegistry, type ContentPack, type ItemDef, type MonsterDef, type SpellDef } from "@dnd/engine";
 
 /**
  * Contenuti importati dai compendi (packages/importer). La cartella è esclusa da git:
@@ -20,6 +20,36 @@ const packs = Object.entries(imported)
  * i pacchetti homebrew della campagna e del giocatore.
  */
 export const registry = packs.length ? createRegistry(...packs) : createRegistry(srd);
+
+/*
+ * Contenuti propri di una campagna (oggetti e incantesimi del Master). Si aggiungono al registro
+ * quando si apre una scheda o una pagina di quella campagna e si tolgono quando la si lascia.
+ */
+let homebrewIds: { items: string[]; spells: string[] } = { items: [], spells: [] };
+let version = 0;
+const watchers = new Set<() => void>();
+export const contentVersion = () => version;
+export function subscribeContent(cb: () => void): () => void {
+  watchers.add(cb);
+  return () => watchers.delete(cb);
+}
+export function applyHomebrew(pack: { items: ItemDef[]; spells: SpellDef[] } | null) {
+  for (const id of homebrewIds.items) registry.items.delete(id);
+  for (const id of homebrewIds.spells) registry.spells.delete(id);
+  homebrewIds = { items: [], spells: [] };
+  for (const item of pack?.items ?? []) {
+    registry.items.set(item.id, item);
+    homebrewIds.items.push(item.id);
+  }
+  for (const spell of pack?.spells ?? []) {
+    registry.spells.set(spell.id, spell);
+    homebrewIds.spells.push(spell.id);
+  }
+  version++;
+  watchers.forEach((w) => w());
+}
+/** Gli id delle voci della campagna cominciano così. */
+export const isHomebrew = (id: string) => id.startsWith("hb.");
 
 /** I mostri importati: un file grande, caricato solo quando il Master ne cerca uno. */
 const monsterFiles = import.meta.glob<{ monsters?: MonsterDef[] }>("../../../packages/content-private/generated/*.monsters.json", { import: "default" });

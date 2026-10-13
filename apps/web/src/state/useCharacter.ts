@@ -11,6 +11,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { registry } from "../content";
 import { repo } from "../data";
+import { useHomebrew } from "./homebrew";
 import { usePresence } from "./presence";
 import { useAuth } from "../firebase/auth";
 import { useLog } from "./log";
@@ -24,6 +25,8 @@ export interface CharacterController {
   automation: AutomationLevel;
   /** Il Master ha fissato l'automazione per tutta la campagna: il giocatore non può cambiarla. */
   automationLocked: boolean;
+  /** Master della campagna del personaggio, se ne ha una. */
+  campaignDmUid?: string;
   /** Modifica diretta (input dell'utente): si salva sempre. */
   update: (fn: (ch: CharacterData) => CharacterData) => void;
   /** Esito calcolato dal motore: applicato, proposto o solo mostrato secondo l'automazione. */
@@ -65,11 +68,19 @@ export function useCharacter(id: string) {
   // Se il personaggio è in una campagna: il blocco del Master vince, e chi tiene aperta la scheda risulta connesso.
   const campaignId = ch?.campaignId;
   const [campaignLock, setCampaignLock] = useState<AutomationLevel | undefined>();
+  const [campaignDmUid, setCampaignDmUid] = useState<string | undefined>();
   useEffect(() => {
     setCampaignLock(undefined);
-    return campaignId ? repo.watchCampaign(campaignId, (c) => setCampaignLock(c?.automationLock)) : undefined;
+    setCampaignDmUid(undefined);
+    return campaignId
+      ? repo.watchCampaign(campaignId, (c) => {
+          setCampaignLock(c?.automationLock);
+          setCampaignDmUid(c?.dmUid);
+        })
+      : undefined;
   }, [campaignId]);
   usePresence(campaignId);
+  const { version: contentVersion } = useHomebrew(campaignId);
 
   const automation = resolveAutomation({ campaignLock, character: ch?.settings.automation, user: userAutomation });
 
@@ -83,7 +94,8 @@ export function useCharacter(id: string) {
       console.error(e);
       return null;
     }
-  }, [resolved, automation]);
+    // contentVersion: gli oggetti e gli incantesimi della campagna sono arrivati o cambiati.
+  }, [resolved, automation, contentVersion]);
 
   const persist = useCallback(
     (next: CharacterData) => {
@@ -137,7 +149,7 @@ export function useCharacter(id: string) {
 
   const controller: CharacterController | null =
     resolved && sheet
-      ? { ch: resolved, ownAutomation: ch?.settings.automation, sheet, automation, automationLocked: !!campaignLock, update, act, pending, confirm, cancel }
+      ? { ch: resolved, ownAutomation: ch?.settings.automation, sheet, automation, automationLocked: !!campaignLock, campaignDmUid, update, act, pending, confirm, cancel }
       : null;
 
   return { loading: ch === undefined, missing: ch === null, broken: !!ch && !sheet, controller };

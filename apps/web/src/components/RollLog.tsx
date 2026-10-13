@@ -27,20 +27,36 @@ export function RollLog({ campaignId, isDm }: { campaignId: string; isDm: boolea
     <section className="panel roll-log">
       <div className="row between">
         <h2>Tiri</h2>
-        {isDm && (
-          <label className="small">
-            <input
-              type="checkbox"
-              checked={secret}
-              onChange={(e) => {
-                setSecret(e.currentTarget.checked);
-                setSecretRolling(e.currentTarget.checked);
-              }}
-            />{" "}
-            I miei tiri sono segreti
-          </label>
+        {isDm && all.length > 0 && (
+          <button
+            className="btn btn-quiet"
+            onClick={() => {
+              if (window.confirm("Svuotare il registro? Spariscono tutti i tiri, per tutti.")) repo.clearRolls(campaignId).catch(() => undefined);
+            }}
+          >
+            Svuota
+          </button>
         )}
       </div>
+      {isDm && (
+        <button
+          className={`toggle secret-toggle ${secret ? "is-on" : ""}`}
+          role="switch"
+          aria-checked={secret}
+          onClick={() => {
+            setSecret(!secret);
+            setSecretRolling(!secret);
+          }}
+        >
+          <span className="toggle-track">
+            <span className="toggle-thumb" />
+          </span>
+          <span className="toggle-text">
+            <span className="toggle-label">Tiri segreti</span>
+            <span className="muted small">{secret ? "I tuoi tiri li vedi solo tu" : "I tuoi tiri li vedono tutti"}</span>
+          </span>
+        </button>
+      )}
       <div className="chips" role="group" aria-label="Tira un dado">
         {DICE.map((d) => (
           <button key={d} className="chip" onClick={() => quick(d)}>

@@ -1,4 +1,4 @@
-import type { AutomationLevel, CharacterData } from "@dnd/engine";
+import type { AutomationLevel, CharacterData, ItemDef, SpellDef } from "@dnd/engine";
 
 export type Unsubscribe = () => void;
 
@@ -22,6 +22,8 @@ export interface EncounterMonster {
   id: string;
   name: string;
   initiative: number | null;
+  /** Condizioni visibili a tutti: id -> round che restano (null = senza scadenza). */
+  conditions?: Record<string, number | null>;
 }
 
 /** Il combattimento in corso, visibile a tutta la campagna. L'iniziativa dei PG sta sui personaggi. */
@@ -40,6 +42,14 @@ export interface MonsterSecret {
   ac: number;
   /** Bonus all'iniziativa, per il tasto "Tira". */
   initiativeBonus: number;
+  /** Id nella raccolta dei mostri, se viene da lì: serve ad aprirne la scheda. */
+  monsterId?: string;
+}
+
+/** Oggetti e incantesimi propri della campagna, inseriti dal Master. */
+export interface Homebrew {
+  items: ItemDef[];
+  spells: SpellDef[];
 }
 
 /** Un tiro condiviso con la campagna. */
@@ -110,8 +120,13 @@ export interface Repository {
   /** Solo il Master: gli altri non ricevono nulla. Chiave = id del mostro. */
   watchMonsterSecrets(campaignId: string, cb: (secrets: Record<string, MonsterSecret>) => void): Unsubscribe;
   saveMonsterSecrets(campaignId: string, secrets: Record<string, MonsterSecret>): Promise<void>;
+  watchHomebrew(campaignId: string, cb: (h: Homebrew | null) => void): Unsubscribe;
+  /** Solo il Master. */
+  saveHomebrew(campaignId: string, homebrew: Homebrew): Promise<void>;
   /** secret = tiro del Master che i giocatori non vedono. */
   addRoll(campaignId: string, roll: Omit<SharedRoll, "id">): Promise<void>;
+  /** Solo il Master: cancella tutti i tiri, pubblici e segreti. */
+  clearRolls(campaignId: string): Promise<void>;
   /** Gli ultimi tiri, dal più recente. secret = quelli riservati al Master. */
   watchRolls(campaignId: string, secret: boolean, cb: (list: SharedRoll[]) => void): Unsubscribe;
   /** "Sono qui": da richiamare a intervalli finché la pagina è aperta. */

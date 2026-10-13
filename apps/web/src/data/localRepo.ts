@@ -1,5 +1,5 @@
 import { applyFieldChanges, diffFields, type CharacterData } from "@dnd/engine";
-import { newCampaignCode, type Campaign, type Encounter, type MonsterSecret, type Presence, type SharedRoll, type Repository, type UserPrefs } from "./repository";
+import { newCampaignCode, type Campaign, type Encounter, type Homebrew, type MonsterSecret, type Presence, type SharedRoll, type Repository, type UserPrefs } from "./repository";
 
 const KEY = "dnd.characters.v1";
 const PREFS = "dnd.prefs.v1";
@@ -9,7 +9,7 @@ const presences = new Map<string, Presence[]>();
 /** Tiri condivisi: in memoria, in modalità locale servono solo a provare il riquadro. */
 const sharedRolls = new Map<string, SharedRoll[]>();
 const ENCOUNTERS = "dnd.encounters.v1";
-type StoredEncounter = { encounter?: Encounter; secrets?: Record<string, MonsterSecret> };
+type StoredEncounter = { encounter?: Encounter; secrets?: Record<string, MonsterSecret>; homebrew?: Homebrew };
 
 function readEncounters(): Record<string, StoredEncounter> {
   try {
@@ -66,7 +66,7 @@ function writeCampaigns(all: Record<string, Campaign>) {
 }
 
 // Sincronizza tra schede del browser aperte sullo stesso PC.
-if (typeof window !== "undefined") window.addEventListener("storage", (e) => (e.key === KEY || e.key === CAMPAIGNS) && notify());
+if (typeof window !== "undefined") window.addEventListener("storage", (e) => (e.key === KEY || e.key === CAMPAIGNS || e.key === ENCOUNTERS) && notify());
 
 /** Modalità senza Firebase: tutto nel browser. */
 export const localRepo: Repository = {
@@ -167,9 +167,22 @@ export const localRepo: Repository = {
   async saveMonsterSecrets(campaignId, secrets) {
     writeEncounter(campaignId, { secrets });
   },
+  watchHomebrew(campaignId, cb) {
+    const emit = () => cb(readEncounters()[campaignId]?.homebrew ?? null);
+    listeners.add(emit);
+    emit();
+    return () => listeners.delete(emit);
+  },
+  async saveHomebrew(campaignId, homebrew) {
+    writeEncounter(campaignId, { homebrew });
+  },
   async addRoll(campaignId, roll) {
     const list = sharedRolls.get(campaignId) ?? [];
     sharedRolls.set(campaignId, [{ ...roll, id: `${roll.at}-${list.length}` }, ...list].slice(0, 60));
+    notify();
+  },
+  async clearRolls(campaignId) {
+    sharedRolls.delete(campaignId);
     notify();
   },
   watchRolls(campaignId, secret, cb) {
