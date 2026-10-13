@@ -10,10 +10,12 @@ import type {
   GrantedSpell,
   Issue,
   Part,
+  Ruleset,
   SlotPool,
   SpellDef,
   SpellRollDef,
   Stat,
+  Value,
 } from "./types.js";
 
 export const ABILITY_NAMES: Record<Ability, string> = {
@@ -23,6 +25,22 @@ export const ABILITY_NAMES: Record<Ability, string> = {
   int: "Intelligenza",
   wis: "Saggezza",
   cha: "Carisma",
+};
+
+export const DAMAGE_TYPE_NAMES: Record<string, string> = {
+  acid: "acido",
+  bludgeoning: "contundenti",
+  cold: "freddo",
+  fire: "fuoco",
+  force: "forza",
+  lightning: "fulmine",
+  necrotic: "necrotici",
+  piercing: "perforanti",
+  poison: "veleno",
+  psychic: "psichici",
+  radiant: "radiosi",
+  slashing: "taglienti",
+  thunder: "tuono",
 };
 
 /** Slot per livello di incantatore (riga 0 = livello 1); le colonne sono gli slot dal 1° al 9°. */
@@ -78,12 +96,13 @@ export const PACT_MAGIC: readonly { slots: number; level: number }[] = [
  * Da soli si segue la tabella della classe (un terzo arrotonda per eccesso);
  * nel multiclasse la regola dice: metà per eccesso, un terzo per difetto.
  */
-export function casterLevelOf(progression: CasterProgression, classLevel: number, multiclass: boolean): number {
+export function casterLevelOf(progression: CasterProgression, classLevel: number, multiclass: boolean, ruleset: Ruleset = "2024"): number {
   switch (progression) {
     case "full":
       return classLevel;
     case "half":
-      return Math.ceil(classLevel / 2);
+      // Nel multiclasse il 2014 arrotonda per difetto, il 2024 per eccesso.
+      return multiclass && ruleset === "2014" ? Math.floor(classLevel / 2) : Math.ceil(classLevel / 2);
     case "third":
       return multiclass ? Math.floor(classLevel / 3) : Math.ceil(classLevel / 3);
     case "pact":
@@ -144,9 +163,11 @@ export interface SpellcastingEnv {
   proficiencyBonus: number;
   mods: Record<Ability, number>;
   d20Penalty: number;
+  ruleset?: Ruleset;
   /** Incantesimi concessi dai privilegi attivi, con la classe a cui il privilegio appartiene. */
   granted: { spell: GrantedSpell; classId?: string; featureId: string; featureName: string }[];
   bonusParts: (...targets: string[]) => Part[];
+  evalValue: (v: Value) => number;
   stat: (path: string, parts: Part[]) => Stat;
   /** false in automazione manuale: nessun controllo di regola. */
   validate: boolean;
@@ -202,7 +223,7 @@ export function computeSpellcasting(env: SpellcastingEnv): ComputedSpellcasting 
       saveDC: env.stat(`spell.dc.${classId}`, [{ label: "Base", value: 8 }, profPart, abilityPart, ...env.bonusParts("spell.dc")]),
       attackBonus: env.stat(`spell.attack.${classId}`, attackParts),
       cantripsMax: tableAt(def.cantrips, lvl),
-      preparedMax: tableAt(def.prepared, lvl),
+      preparedMax: Array.isArray(def.prepared) ? tableAt(def.prepared, lvl) : Math.max(0, env.evalValue(def.prepared)),
       maxSpellLevel,
       cantrips: sel?.cantrips ?? [],
       prepared: sel?.prepared ?? [],
@@ -215,7 +236,7 @@ export function computeSpellcasting(env: SpellcastingEnv): ComputedSpellcasting 
   const casterLevel =
     shared.length === 1
       ? casterLevelOf(shared[0]!.progression, shared[0]!.level, false)
-      : shared.reduce((a, s) => a + casterLevelOf(s.progression, s.level, true), 0);
+      : shared.reduce((a, s) => a + casterLevelOf(s.progression, s.level, true, env.ruleset), 0);
   const table = slotsForCasterLevel(casterLevel);
   const slots: SlotPool[] = [];
   for (let level = 1; level <= 9; level++) {

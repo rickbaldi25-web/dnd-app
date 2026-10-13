@@ -35,12 +35,13 @@ export function validateCharacter(ch: CharacterData, reg: Registry, vctx: Valida
 
   /* bonus del background (+2/+1 oppure +1/+1/+1) */
   const bg = reg.backgrounds.get(ch.backgroundId);
-  if (bg) {
+  if (bg?.abilities) {
+    const abilities = bg.abilities;
     const entries = Object.entries(ch.backgroundBoosts).filter(([, v]) => v);
     if (entries.length === 0) warn("background.boosts.missing", `Assegna i bonus di caratteristica del background ${bg.name}.`);
     else {
       for (const [a] of entries) {
-        if (!bg.abilities.includes(a as never)) err("background.boosts.ability", `${bg.name} non può aumentare ${a.toUpperCase()}.`, `backgroundBoosts.${a}`);
+        if (!abilities.includes(a as never)) err("background.boosts.ability", `${bg.name} non può aumentare ${a.toUpperCase()}.`, `backgroundBoosts.${a}`);
       }
       const pattern = entries.map(([, v]) => v).sort().join(",");
       if (pattern !== "1,2" && pattern !== "1,1,1") err("background.boosts.pattern", "I bonus del background devono essere +2/+1 oppure +1/+1/+1.");
@@ -115,9 +116,10 @@ export function validateCharacter(ch: CharacterData, reg: Registry, vctx: Valida
     for (const classId of Object.keys(levels)) {
       const cls = reg.classes.get(classId);
       if (!cls) continue;
-      const ok = cls.primaryAbility.some((a) => (ch.abilityScores[a] ?? 0) + (ch.backgroundBoosts[a] ?? 0) >= 13);
+      const has = (a: (typeof cls.primaryAbility)[number]) => (ch.abilityScores[a] ?? 0) + (ch.backgroundBoosts[a] ?? 0) >= 13;
+      const ok = cls.primaryAbilityAll ? cls.primaryAbility.every(has) : cls.primaryAbility.some(has);
       if (!ok) {
-        err("multiclass.prereq", `Multiclasse: serve almeno 13 in ${cls.primaryAbility.map((a) => a.toUpperCase()).join(" o ")} per ${cls.name}.`);
+        err("multiclass.prereq", `Multiclasse: serve almeno 13 in ${cls.primaryAbility.map((a) => a.toUpperCase()).join(cls.primaryAbilityAll ? " e " : " o ")} per ${cls.name}.`);
       }
     }
   }

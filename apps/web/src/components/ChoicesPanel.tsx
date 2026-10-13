@@ -1,9 +1,12 @@
-import { featsByTag } from "@dnd/engine";
+import { ABILITIES, featsByTag } from "@dnd/engine";
 import { useState } from "react";
 import { optionLabel, registry } from "../content";
 import type { CharacterController } from "../state/useCharacter";
 
 type Pending = CharacterController["sheet"]["pendingChoices"][number];
+
+/** Oltre questo numero di opzioni i pulsanti diventano un menu a tendina. */
+const MANY = 24;
 
 function optionsFor(c: CharacterController, p: Pending): string[] {
   if (p.kind === "subclass") {
@@ -13,10 +16,16 @@ function optionsFor(c: CharacterController, p: Pending): string[] {
   if (Array.isArray(p.from)) return p.from;
   if (p.from && "tag" in p.from) return featsByTag(registry, p.from.tag).map((f) => f.id);
   if (p.kind === "weaponMastery") return [...registry.items.values()].filter((i) => i.kind === "weapon").map((i) => i.id);
+  if (p.kind === "abilityBoost") return [...ABILITIES];
+  if (p.kind === "expertise") {
+    return Object.entries(c.sheet.skills)
+      .filter(([, s]) => s.proficient && !s.expertise)
+      .map(([id]) => id);
+  }
   return [];
 }
 
-/** Scelte ancora da fare (abilità, maestrie, stile, sottoclasse...). Compare solo se ce ne sono. */
+/** Scelte ancora da fare (abilità, stile, sottoclasse, aumenti...). Compare solo se ce ne sono. */
 export function ChoicesPanel({ c }: { c: CharacterController }) {
   const pending = c.sheet.pendingChoices;
   if (!pending.length) return null;
@@ -35,16 +44,25 @@ export function ChoicesPanel({ c }: { c: CharacterController }) {
 function ChoiceRow({ c, p }: { c: CharacterController; p: Pending }) {
   const current = p.kind === "subclass" ? [] : (c.ch.choices[p.id] ?? []);
   const [picked, setPicked] = useState<string[]>(current);
-  const options = optionsFor(c, p).filter((o) => !(p.kind === "skill" && registry.backgrounds.get(c.ch.backgroundId)?.skills.includes(o)));
+  const options = optionsFor(c, p)
+    .filter((o) => !(p.kind === "skill" && registry.backgrounds.get(c.ch.backgroundId)?.skills.includes(o)))
+    .sort((a, b) => optionLabel(p.kind, a).localeCompare(optionLabel(p.kind, b), "it"));
   const need = p.required;
+  const count = (o: string) => picked.filter((x) => x === o).length;
+  // Con "repeat" la stessa opzione si può prendere più volte (+2 alla stessa caratteristica).
   const flip = (o: string) =>
-    setPicked((xs) => (xs.includes(o) ? xs.filter((x) => x !== o) : need === 1 ? [o] : xs.length < need ? [...xs, o] : xs));
+    setPicked((xs) => {
+      if (p.repeat) return xs.length < need ? [...xs, o] : xs.includes(o) ? xs.filter((x) => x !== o) : xs;
+      if (xs.includes(o)) return xs.filter((x) => x !== o);
+      return need === 1 ? [o] : xs.length < need ? [...xs, o] : xs;
+    });
   const save = () =>
     c.update((ch) =>
       p.kind === "subclass"
         ? { ...ch, subclasses: { ...ch.subclasses, [p.id.split(".")[0]!]: picked[0]! } }
         : { ...ch, choices: { ...ch.choices, [p.id]: picked } },
     );
+  const description = picked.length === 1 ? describe(p.kind, picked[0]!) : undefined;
   return (
     <div className="choice">
       <p>
@@ -53,16 +71,41 @@ function ChoiceRow({ c, p }: { c: CharacterController; p: Pending }) {
           scegli {need}, {picked.length} selezionat{picked.length === 1 ? "a" : "e"}
         </span>
       </p>
-      <div className="chips">
-        {options.map((o) => (
-          <button key={o} className={`chip ${picked.includes(o) ? "is-on" : ""}`} aria-pressed={picked.includes(o)} onClick={() => flip(o)}>
-            {optionLabel(p.kind, o)}
-          </button>
-        ))}
-      </div>
+      {options.length > MANY && need === 1 ? (
+        <select value={picked[0] ?? ""} onChange={(e) => setPicked(e.currentTarget.value ? [e.currentTarget.value] : [])} aria-label={p.label}>
+          <option value="">—</option>
+          {options.map((o) => (
+            <option key={o} value={o}>
+              {optionLabel(p.kind, o)}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <div className="chips">
+          {options.map((o) => (
+            <button key={o} className={`chip ${picked.includes(o) ? "is-on" : ""}`} aria-pressed={picked.includes(o)} onClick={() => flip(o)}>
+              {optionLabel(p.kind, o)}
+              {count(o) > 1 ? ` ×${count(o)}` : ""}
+            </button>
+          ))}
+        </div>
+      )}
+      {p.repeat && picked.length > 0 && (
+        <button className="btn btn-quiet" onClick={() => setPicked([])}>
+          Azzera
+        </button>
+      )}
+      {description && <p className="muted small choice-description">{description}</p>}
       <button className="btn btn-primary" disabled={picked.length !== need} onClick={save}>
         Conferma
       </button>
     </div>
   );
+}
+
+/** Testo dell'opzione scelta, per decidere senza aprire il manuale. Solo l'inizio: i testi sono lunghi. */
+function describe(kind: string, id: string): string | undefined {
+  const text = kind === "subclass" ? registry.subclasses.get(id)?.description : kind === "feat" ? registry.feats.get(id)?.feature.description : undefined;
+  if (!text) return undefined;
+  return text.length > 400 ? `${text.slice(0, 400).trimEnd()}…` : text;
 }

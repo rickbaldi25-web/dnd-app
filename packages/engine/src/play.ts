@@ -3,7 +3,7 @@ import { classLevelsOf, computeSheet } from "./compute.js";
 import { defaultRng, formatMod, roll, rollD20, type Rng } from "./dice.js";
 import { cloneState, type Proposal } from "./patch.js";
 import type { Registry } from "./registry.js";
-import { ABILITY_NAMES, spellDice } from "./spells.js";
+import { ABILITY_NAMES, DAMAGE_TYPE_NAMES, spellDice } from "./spells.js";
 import type { Ability, CharacterData, ComputedSheet, Die } from "./types.js";
 import { evalValue, proficiencyBonusFor, type EvalContext } from "./values.js";
 
@@ -377,7 +377,8 @@ export function castSpell(
       mod: sheet.abilities[entry.ability].mod,
     });
     const r = roll(expr, rng);
-    const label = spell.roll.kind === "damage" ? `Danni${spell.roll.damageType ? ` (${spell.roll.damageType})` : ""}` : spell.roll.kind === "heal" ? "Cura" : "PF temporanei";
+    const type = spell.roll.damageType;
+    const label = spell.roll.kind === "damage" ? `Danni${type ? ` (${DAMAGE_TYPE_NAMES[type] ?? type})` : ""}` : spell.roll.kind === "heal" ? "Cura" : "PF temporanei";
     rolls.push({ label, expr, dice: r.rolls.map((x) => x.value), total: Math.max(0, r.total) });
   }
 
@@ -442,7 +443,7 @@ export function shortRest(
     for (let i = 0; i < n; i++) {
       const r = roll(`1${die}`, rng);
       // Regole 2024: dado + Cos, minimo 1 PF per dado.
-      const healed = Math.max(1, r.total + con);
+      const healed = Math.max(reg.ruleset === "2014" ? 0 : 1, r.total + con);
       rolls.push({ label: `Dado Vita ${die}`, expr: `1${die}${con >= 0 ? "+" : ""}${con}`, dice: [r.total], total: healed });
       s.hpCurrent = Math.min(sheet.hpMax.value, s.hpCurrent + healed);
     }
@@ -478,7 +479,17 @@ export function longRest(ch: CharacterData, reg: Registry): Proposal {
   const lines: string[] = [];
   s.hpCurrent = sheet.hpMax.value;
   s.hpTemp = 0;
-  s.hitDiceSpent = {}; // regole 2024: si recuperano tutti i Dadi Vita
+  if (reg.ruleset === "2014") {
+    // Regole 2014: si recupera metà dei Dadi Vita totali (almeno 1), dai più grandi.
+    let back = Math.max(1, Math.floor(sheet.hitDice.reduce((a, h) => a + h.total, 0) / 2));
+    for (const h of [...sheet.hitDice].sort((a, b) => Number(b.die.slice(1)) - Number(a.die.slice(1)))) {
+      const n = Math.min(back, h.spent);
+      s.hitDiceSpent[h.die] = h.spent - n;
+      back -= n;
+    }
+  } else {
+    s.hitDiceSpent = {}; // regole 2024: si recuperano tutti i Dadi Vita
+  }
   for (const r of sheet.resources) {
     if (r.spent === 0) continue;
     const back = r.longRest === "all" ? r.spent : Math.min(r.spent, r.longRest);
@@ -495,7 +506,7 @@ export function longRest(ch: CharacterData, reg: Registry): Proposal {
     s.exhaustion -= 1;
     lines.push(`Indebolimento: ${ch.state.exhaustion} → ${s.exhaustion}`);
   }
-  lines.unshift(`PF al massimo (${s.hpCurrent}), Dadi Vita${sheet.spellcasting ? ", slot incantesimo" : ""} e risorse recuperati.`);
+  lines.unshift(`PF al massimo (${s.hpCurrent}), ${reg.ruleset === "2014" ? "metà dei Dadi Vita" : "Dadi Vita"}${sheet.spellcasting ? ", slot incantesimo" : ""} e risorse recuperati.`);
   return { title: "Riposo lungo", lines, rolls: [], state: s };
 }
 

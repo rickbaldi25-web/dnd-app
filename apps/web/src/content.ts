@@ -1,12 +1,28 @@
 import { srd } from "@dnd/content-srd";
-import { createRegistry } from "@dnd/engine";
+import { ABILITIES, createRegistry, type ContentPack } from "@dnd/engine";
+
+/**
+ * Contenuti importati dai compendi (packages/importer). La cartella è esclusa da git:
+ * su un computer senza quei file l'app ripiega sul pacchetto SRD incluso nel progetto.
+ * I mostri hanno un file a parte, caricato solo quando servono al Master.
+ */
+const imported = import.meta.glob<ContentPack>("../../../packages/content-private/generated/*.{core,spells,items}.json", {
+  eager: true,
+  import: "default",
+});
+// Prima i file "core": sono quelli che dichiarano l'edizione delle regole.
+const packs = Object.entries(imported)
+  .sort(([a], [b]) => Number(b.includes(".core.")) - Number(a.includes(".core.")))
+  .map(([, p]) => p);
 
 /**
  * Registro dei contenuti usato dall'app. Qui in futuro si aggiungono
- * i pacchetti homebrew della campagna e del giocatore:
- *   createRegistry(srd, homebrewCampagna, homebrewPersonale)
+ * i pacchetti homebrew della campagna e del giocatore.
  */
-export const registry = createRegistry(srd);
+export const registry = packs.length ? createRegistry(...packs) : createRegistry(srd);
+
+/** Nelle regole 2014 le specie si chiamano razze. */
+export const SPECIES_LABEL = registry.ruleset === "2014" ? "Razza" : "Specie";
 
 export const ABILITY_NAMES = {
   str: { short: "FOR", name: "Forza" },
@@ -76,7 +92,8 @@ export function skillName(id: string): string {
   return registry.skills.get(id)?.name ?? id;
 }
 export function optionLabel(kind: string, id: string): string {
-  if (kind === "skill") return skillName(id);
+  if (kind === "skill" || kind === "expertise") return skillName(id);
+  if (kind === "abilityBoost" && (ABILITIES as readonly string[]).includes(id)) return ABILITY_NAMES[id as keyof typeof ABILITY_NAMES].name;
   if (kind === "feat") return registry.feats.get(id)?.name ?? id;
   if (kind === "weaponMastery") {
     const w = registry.items.get(id);

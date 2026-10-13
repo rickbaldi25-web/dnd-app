@@ -89,7 +89,8 @@ export function collectFeatures(ch: CharacterData, reg: Registry, classLevels: R
   for (const f of species.features) active.push({ feature: f, source: species.name });
 
   const bg = must(reg.backgrounds, ch.backgroundId, "Background");
-  const bgFeat = reg.feats.get(bg.featId);
+  const bgFeat = bg.featId ? reg.feats.get(bg.featId) : undefined;
+  for (const f of bg.features ?? []) active.push({ feature: f, source: bg.name });
   if (bgFeat) active.push({ feature: bgFeat.feature, source: `${bg.name} (talento)` });
   if (bg.toolChoice) {
     choices.push({ id: "background.tool", kind: "tool", label: bg.toolChoice.label, count: 1, from: bg.toolChoice.from, source: bg.name });
@@ -191,7 +192,9 @@ export function computeSheet(ch: CharacterData, reg: Registry, opts: ComputeOpti
   const { active, choices, chosenSkills, chosenTools } = collectFeatures(ch, reg, classLevels);
   const { armor, shield, weapons } = equippedGear(ch, reg);
   const exh = Math.max(0, Math.min(6, ch.state.exhaustion));
-  const d20Penalty = exh * EXHAUSTION_D20_PENALTY;
+  // Indebolimento: nel 2024 toglie 2 a ogni d20 per livello; nel 2014 dà svantaggi a soglie.
+  const old = reg.ruleset === "2014";
+  const d20Penalty = old ? 0 : exh * EXHAUSTION_D20_PENALTY;
 
   const stat = (path: string, parts: Part[]): Stat => {
     const computed = parts.reduce((a, p) => a + p.value, 0);
@@ -346,7 +349,7 @@ export function computeSheet(ch: CharacterData, reg: Registry, opts: ComputeOpti
   const perc = skills["perception"];
   // Il passivo non è un tiro di d20: niente penalità da Indebolimento; vantaggio = +5.
   const passivePerception = perc
-    ? 10 + perc.mod.value + (perc.mod.overridden ? 0 : d20Penalty) + (perc.advantage ? 5 : 0)
+    ? 10 + perc.mod.value + (perc.mod.overridden ? 0 : d20Penalty) + (perc.advantage ? 5 : 0) - (old && exh >= 1 ? 5 : 0)
     : 10 + mods.wis;
 
   /* --- CA --- */
@@ -391,6 +394,7 @@ export function computeSheet(ch: CharacterData, reg: Registry, opts: ComputeOpti
     hpParts.push({ label: "Dadi Vita", value: dice }, { label: "Costituzione", value: con });
   }
   hpParts.push(...bonusParts("hp.max"));
+  if (old && exh >= 4) hpParts.push({ label: "Indebolimento", value: -Math.ceil(sumParts(hpParts) / 2) });
   const hpMax = stat("hp.max", hpParts);
 
   /* --- iniziativa, velocità --- */
@@ -400,7 +404,11 @@ export function computeSheet(ch: CharacterData, reg: Registry, opts: ComputeOpti
 
   const speedParts: Part[] = [{ label: species.name, value: species.speed }, ...bonusParts("speed.walk")];
   if (armor?.strength && finalScores.str < armor.strength) speedParts.push({ label: `${armor.name} (For ${armor.strength})`, value: -10 });
-  if (exh) speedParts.push({ label: "Indebolimento", value: -exh * EXHAUSTION_SPEED_PENALTY });
+  if (old) {
+    const base = sumParts(speedParts);
+    if (exh >= 5) speedParts.push({ label: "Indebolimento", value: -base });
+    else if (exh >= 2) speedParts.push({ label: "Indebolimento", value: -Math.ceil(base / 2) });
+  } else if (exh) speedParts.push({ label: "Indebolimento", value: -exh * EXHAUSTION_SPEED_PENALTY });
   const speedStat = stat("speed.walk", speedParts);
   const speed = { ...speedStat, value: Math.max(0, speedStat.value) };
 
@@ -536,6 +544,7 @@ export function computeSheet(ch: CharacterData, reg: Registry, opts: ComputeOpti
     proficiencyBonus,
     mods,
     d20Penalty,
+    ruleset: reg.ruleset,
     granted: [
       ...active.flatMap(({ feature, classId }) =>
         (feature.spells ?? []).map((spell) => ({ spell, classId, featureId: feature.id, featureName: feature.name })),
@@ -557,6 +566,7 @@ export function computeSheet(ch: CharacterData, reg: Registry, opts: ComputeOpti
       ),
     ],
     bonusParts,
+    evalValue: (v) => evalValue(v, ctx),
     stat,
     validate: policy.validation !== "off",
     issues,
@@ -606,6 +616,12 @@ export function computeSheet(ch: CharacterData, reg: Registry, opts: ComputeOpti
     conditionImmunities: unique(grants("conditionImmunity")),
     senses: live.flatMap(({ effect }) => (effect.type === "sense" ? [{ sense: effect.sense, range: effect.range }] : [])),
     advantages,
+    disadvantages: old
+      ? [
+          ...(exh >= 1 ? [{ on: "check.all", label: "Indebolimento" }] : []),
+          ...(exh >= 3 ? [{ on: "attack.all", label: "Indebolimento" }, { on: "save.all", label: "Indebolimento" }] : []),
+        ]
+      : [],
     proficiencies: {
       armor: [...armorProf],
       weapons: [...weaponProf],

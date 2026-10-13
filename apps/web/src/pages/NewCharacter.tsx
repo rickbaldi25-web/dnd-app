@@ -11,7 +11,7 @@ import {
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { AutomationSwitch } from "../components/AutomationSwitch";
-import { ABILITY_NAMES, registry } from "../content";
+import { ABILITY_NAMES, SPECIES_LABEL, registry } from "../content";
 import { repo } from "../data";
 import { useAuth } from "../firebase/auth";
 import { useUserAutomation } from "../state/useCharacter";
@@ -20,14 +20,20 @@ type Method = "standard" | "pointbuy" | "free";
 
 const EMPTY: Record<Ability, number> = { str: 8, dex: 8, con: 8, int: 8, wis: 8, cha: 8 };
 
+/** Con i contenuti importati le liste sono lunghe: in ordine alfabetico si trovano. */
+const byName = <T extends { name: string }>(m: Map<string, T>): T[] => [...m.values()].sort((a, b) => a.name.localeCompare(b.name, "it"));
+const SPECIES = byName(registry.species);
+const BACKGROUNDS = byName(registry.backgrounds);
+const CLASSES = byName(registry.classes);
+
 export function NewCharacter() {
   const { user } = useAuth();
   const nav = useNavigate();
   const [pref] = useUserAutomation();
   const [name, setName] = useState("");
-  const [speciesId, setSpecies] = useState([...registry.species.keys()][0]!);
-  const [backgroundId, setBackground] = useState([...registry.backgrounds.keys()][0]!);
-  const [classId, setClass] = useState([...registry.classes.keys()][0]!);
+  const [speciesId, setSpecies] = useState((SPECIES.find((s) => s.id === "human") ?? SPECIES[0]!).id);
+  const [backgroundId, setBackground] = useState(BACKGROUNDS[0]!.id);
+  const [classId, setClass] = useState(CLASSES[0]!.id);
   const [method, setMethod] = useState<Method>("standard");
   const [standard, setStandard] = useState<Partial<Record<Ability, number>>>({});
   const [scores, setScores] = useState<Record<Ability, number>>(EMPTY);
@@ -38,6 +44,7 @@ export function NewCharacter() {
   const [saving, setSaving] = useState(false);
 
   const bg = registry.backgrounds.get(backgroundId)!;
+  const bgAbilities = bg.abilities ?? [];
   const cls = registry.classes.get(classId)!;
 
   const finalBase: Record<Ability, number> | null = useMemo(() => {
@@ -50,7 +57,7 @@ export function NewCharacter() {
 
   const boosts: Partial<Record<Ability, number>> =
     pattern === "111"
-      ? Object.fromEntries(bg.abilities.map((a) => [a, 1]))
+      ? Object.fromEntries(bgAbilities.map((a) => [a, 1]))
       : plus2 && plus1 && plus2 !== plus1
         ? { [plus2]: 2, [plus1]: 1 }
         : {};
@@ -60,7 +67,7 @@ export function NewCharacter() {
   if (!name.trim()) problems.push("Dai un nome al personaggio.");
   if (!finalBase) problems.push("Assegna tutti i valori dell'array standard.");
   if (method === "pointbuy" && (spent === null || spent > POINT_BUY_BUDGET)) problems.push(`Point buy: massimo ${POINT_BUY_BUDGET} punti, punteggi da 8 a 15.`);
-  if (Object.keys(boosts).length === 0) problems.push(`Scegli i bonus di caratteristica del background (${bg.name}).`);
+  if (bgAbilities.length > 0 && Object.keys(boosts).length === 0) problems.push(`Scegli i bonus di caratteristica del background (${bg.name}).`);
 
   const usedStandard = (except: Ability) =>
     ABILITIES.filter((a) => a !== except && standard[a] !== undefined).map((a) => standard[a]!);
@@ -76,7 +83,7 @@ export function NewCharacter() {
         backgroundId,
         classId,
         abilityScores: finalBase,
-        backgroundBoosts: boosts,
+        backgroundBoosts: bgAbilities.length > 0 ? boosts : {},
         automation,
         ownerUid: user.uid,
       },
@@ -101,9 +108,9 @@ export function NewCharacter() {
         </label>
         <div className="field-row">
           <label className="field">
-            <span>Specie</span>
+            <span>{SPECIES_LABEL}</span>
             <select value={speciesId} onChange={(e) => setSpecies(e.currentTarget.value)}>
-              {[...registry.species.values()].map((s) => (
+              {SPECIES.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
                 </option>
@@ -113,7 +120,7 @@ export function NewCharacter() {
           <label className="field">
             <span>Classe</span>
             <select value={classId} onChange={(e) => setClass(e.currentTarget.value)}>
-              {[...registry.classes.values()].map((s) => (
+              {CLASSES.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name} ({s.hitDie})
                 </option>
@@ -130,7 +137,7 @@ export function NewCharacter() {
                 setPlus2("");
               }}
             >
-              {[...registry.backgrounds.values()].map((s) => (
+              {BACKGROUNDS.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
                 </option>
@@ -139,7 +146,12 @@ export function NewCharacter() {
           </label>
         </div>
         <p className="muted small">
-          {cls.name}: caratteristica principale {cls.primaryAbility.map((a) => ABILITY_NAMES[a].name).join(" o ")}. Abilità, maestrie e altre scelte si completano nella scheda.
+          {cls.primaryAbility.length > 0 && (
+            <>
+              {cls.name}: caratteristica principale {cls.primaryAbility.map((a) => ABILITY_NAMES[a].name).join(cls.primaryAbilityAll ? " e " : " o ")}.{" "}
+            </>
+          )}
+          Abilità, sottoclasse e altre scelte si completano nella scheda.
         </p>
       </section>
 
@@ -196,9 +208,11 @@ export function NewCharacter() {
           </p>
         )}
 
+        {bgAbilities.length > 0 && (
+          <>
         <h3>Bonus del background</h3>
         <p className="muted small">
-          {bg.name} aumenta {bg.abilities.map((a) => ABILITY_NAMES[a].name).join(", ")}.
+          {bg.name} aumenta {bgAbilities.map((a) => ABILITY_NAMES[a].name).join(", ")}.
         </p>
         <div className="segmented" role="radiogroup" aria-label="Distribuzione">
           <button role="radio" aria-checked={pattern === "21"} className={pattern === "21" ? "is-on" : ""} onClick={() => setPattern("21")}>
@@ -214,7 +228,7 @@ export function NewCharacter() {
               <span>+2 a</span>
               <select value={plus2} onChange={(e) => setPlus2(e.currentTarget.value as Ability)}>
                 <option value="">—</option>
-                {bg.abilities.map((a) => (
+                {bgAbilities.map((a) => (
                   <option key={a} value={a} disabled={a === plus1}>
                     {ABILITY_NAMES[a].name}
                   </option>
@@ -225,7 +239,7 @@ export function NewCharacter() {
               <span>+1 a</span>
               <select value={plus1} onChange={(e) => setPlus1(e.currentTarget.value as Ability)}>
                 <option value="">—</option>
-                {bg.abilities.map((a) => (
+                {bgAbilities.map((a) => (
                   <option key={a} value={a} disabled={a === plus2}>
                     {ABILITY_NAMES[a].name}
                   </option>
@@ -233,6 +247,8 @@ export function NewCharacter() {
               </select>
             </label>
           </div>
+        )}
+          </>
         )}
       </section>
 

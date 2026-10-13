@@ -9,7 +9,9 @@
     "build": "pnpm --filter @dnd/web build",
     "deploy": "pnpm build && firebase deploy --only hosting,firestore",
     "test": "pnpm -r test",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "dev:offline": "pnpm --filter @dnd/web dev:offline",
+    "import": "node packages/importer/scripts/import.mjs"
   },
   "devDependencies": {
     "firebase-tools": "^15.0.0"

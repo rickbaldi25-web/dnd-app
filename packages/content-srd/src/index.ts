@@ -6,10 +6,12 @@ import { feats } from "./feats.js";
 import { armor, gear, shields, weapons } from "./items/equipment.js";
 import { skills } from "./skills.js";
 import { dwarf, human } from "./species/species.js";
+import { spells } from "./spells/index.js";
 
 /**
  * Contenuti SRD 5.2 (regole 2024).
- * Testi riformulati in italiano. Vedi CREDITS.md per l'attribuzione CC-BY-4.0.
+ * Classi, specie e talenti hanno testi riformulati in italiano; gli incantesimi usano
+ * il testo dell'SRD 5.2.1 ufficiale in italiano. Vedi CREDITS.md per l'attribuzione CC-BY-4.0.
  */
 export const srd: ContentPack = {
   id: "srd-5.2",
@@ -22,7 +24,9 @@ export const srd: ContentPack = {
   feats,
   items: [...armor, ...shields, ...weapons, ...gear],
   skills,
+  spells,
 };
 
+export { spells } from "./spells/index.js";
 export * from "./items/equipment.js";
 export { skills, ALL_SKILL_IDS } from "./skills.js";

@@ -4,6 +4,8 @@ import type {
   ContentPack,
   FeatDef,
   ItemDef,
+  MonsterDef,
+  Ruleset,
   SkillDef,
   SpeciesDef,
   SpellDef,
@@ -25,6 +27,9 @@ export interface Registry {
   items: Map<string, ItemDef>;
   skills: Map<string, SkillDef>;
   spells: Map<string, SpellDef>;
+  monsters: Map<string, MonsterDef>;
+  /** Edizione delle regole: quella dell'ultimo pacchetto che la dichiara. */
+  ruleset: Ruleset;
 }
 
 export function createRegistry(...packs: ContentPack[]): Registry {
@@ -38,9 +43,13 @@ export function createRegistry(...packs: ContentPack[]): Registry {
     items: new Map(),
     skills: new Map(),
     spells: new Map(),
+    monsters: new Map(),
+    ruleset: "2024",
   };
   for (const p of packs) {
     r.packs.push(p.id);
+    if (p.ruleset) r.ruleset = p.ruleset;
+    for (const x of p.monsters ?? []) r.monsters.set(x.id, x);
     for (const x of p.classes ?? []) r.classes.set(x.id, x);
     for (const x of p.subclasses ?? []) r.subclasses.set(x.id, x);
     for (const x of p.species ?? []) r.species.set(x.id, x);

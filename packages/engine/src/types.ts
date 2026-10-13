@@ -238,6 +238,8 @@ export interface WidgetRef {
 export interface Feature {
   id: string;
   name: string;
+  /** Manuale e pagina da cui viene, es. "Player's Handbook p. 72". */
+  source?: string;
   level?: number; // livello di classe a cui si ottiene (per classi/sottoclassi)
   description?: string;
   effects?: Effect[];
@@ -281,6 +283,8 @@ export interface SpellRollDef {
 export interface SpellDef {
   id: string;
   name: string;
+  /** Nome originale inglese, per chi cerca con quello. */
+  nameEn?: string;
   /** 0 = trucchetto. */
   level: number;
   school: SpellSchool;
@@ -316,8 +320,11 @@ export interface SpellcastingDef {
   list: string;
   /** Trucchetti conosciuti per livello di classe (values[0] = livello 1). */
   cantrips?: number[];
-  /** Incantesimi preparati per livello di classe. */
-  prepared: number[];
+  /**
+   * Quanti incantesimi si preparano (o si conoscono): tabella per livello di classe,
+   * oppure una formula, es. livello + modificatore per Chierico e Mago nelle regole 2014.
+   */
+  prepared: number[] | Value;
   /** Livello di classe da cui si lanciano incantesimi. Omesso = 1. */
   fromLevel?: number;
   /** Quando si possono cambiare gli incantesimi preparati. Informativo. */
@@ -360,6 +367,8 @@ export interface ClassDef {
   name: string;
   hitDie: Die;
   primaryAbility: Ability[]; // per il multiclasse: basta una (es. Guerriero: str O dex)
+  /** Per il multiclasse servono tutte (es. Monaco: Des E Sag). */
+  primaryAbilityAll?: boolean;
   proficiencies: ProficiencySet; // come classe iniziale
   multiclassProficiencies: ProficiencySet;
   skillChoice: { count: number; from: string[] };
@@ -375,6 +384,8 @@ export interface SubclassDef {
   id: string;
   classId: string;
   name: string;
+  description?: string;
+  source?: string;
   /** Per le sottoclassi che danno incantesimi a una classe che non ne ha. */
   spellcasting?: SpellcastingDef;
   features: Feature[];
@@ -383,7 +394,9 @@ export interface SubclassDef {
 export interface SpeciesDef {
   id: string;
   name: string;
-  size: "Small" | "Medium" | "Small or Medium";
+  description?: string;
+  source?: string;
+  size: string; // "Small", "Medium", "Small or Medium"...
   speed: number;
   features: Feature[];
 }
@@ -391,8 +404,14 @@ export interface SpeciesDef {
 export interface BackgroundDef {
   id: string;
   name: string;
-  abilities: [Ability, Ability, Ability];
-  featId: string;
+  /** Regole 2024: le tre caratteristiche che il background può aumentare. */
+  abilities?: [Ability, Ability, Ability];
+  /** Regole 2024: talento d'origine. */
+  featId?: string;
+  /** Regole 2014: il privilegio del background e le sue tabelle. */
+  features?: Feature[];
+  description?: string;
+  source?: string;
   skills: string[];
   tools?: string[];
   toolChoice?: { label: string; from: string[] };
@@ -403,6 +422,9 @@ export interface FeatDef {
   name: string;
   /** "option" = opzioni di classe che non sono talenti (Metamagia, Suppliche Occulte...), distinte dal tag. */
   category: "origin" | "general" | "fighting-style" | "epic-boon" | "option";
+  /** Prerequisito a parole, quando non è codificato in prerequisites. */
+  prerequisiteText?: string;
+  source?: string;
   tags?: string[];
   /** Si può prendere più volte (es. Aumento dei Punteggi di Caratteristica). */
   repeatable?: boolean;
@@ -414,7 +436,19 @@ export interface FeatDef {
   feature: Feature;
 }
 
-export interface ArmorDef {
+/** Campi comuni a tutti gli oggetti, tutti facoltativi. */
+export interface ItemInfo {
+  description?: string;
+  /** Peso in libbre e valore in monete d'oro. */
+  weight?: number;
+  value?: number;
+  magic?: boolean;
+  rarity?: string;
+  attunement?: boolean;
+  source?: string;
+}
+
+export interface ArmorDef extends ItemInfo {
   id: string;
   name: string;
   kind: "armor";
@@ -425,7 +459,7 @@ export interface ArmorDef {
   stealthDisadvantage?: boolean;
 }
 
-export interface ShieldDef {
+export interface ShieldDef extends ItemInfo {
   id: string;
   name: string;
   kind: "shield";
@@ -443,7 +477,7 @@ export type WeaponProperty =
   | "versatile"
   | "ammunition";
 
-export interface WeaponDef {
+export interface WeaponDef extends ItemInfo {
   id: string;
   name: string;
   kind: "weapon";
@@ -453,14 +487,56 @@ export interface WeaponDef {
   damageType: "bludgeoning" | "piercing" | "slashing";
   properties: WeaponProperty[];
   versatile?: string;
-  mastery: string; // "Cleave", "Topple", ...
+  /** Regole 2024: proprietà di maestria ("Cleave", "Topple"...). */
+  mastery?: string;
   rangeFt?: [number, number];
 }
 
-export interface GearDef {
+export interface GearDef extends ItemInfo {
   id: string;
   name: string;
   kind: "gear";
+  /** Pozione, anello, bacchetta, oggetto meraviglioso... */
+  category?: string;
+}
+
+/** Scheda di un mostro o PNG, per il pannello del Master. */
+export interface MonsterDef {
+  id: string;
+  name: string;
+  size: string;
+  type: string;
+  alignment?: string;
+  ac: number;
+  acNote?: string;
+  hp: number;
+  hpFormula?: string;
+  speed: string;
+  abilities: Record<Ability, number>;
+  saves?: Partial<Record<Ability, number>>;
+  skills?: Record<string, number>;
+  resistances?: string;
+  vulnerabilities?: string;
+  immunities?: string;
+  conditionImmunities?: string;
+  senses?: string;
+  passivePerception?: number;
+  languages?: string;
+  /** Grado di sfida come nel manuale: "1/4", "5"... */
+  cr: string;
+  traits: MonsterEntry[];
+  actions: MonsterEntry[];
+  reactions?: MonsterEntry[];
+  legendary?: MonsterEntry[];
+  environment?: string;
+  source?: string;
+}
+
+export interface MonsterEntry {
+  name: string;
+  text: string;
+  /** Attacco già pronto da tirare: bonus per colpire e dadi di danno. */
+  attack?: { bonus: number; damage: string };
 }
 
 export type ItemDef = ArmorDef | ShieldDef | WeaponDef | GearDef;
@@ -469,6 +545,9 @@ export interface ContentPack {
   id: string;
   name: string;
   license?: string;
+  /** Edizione delle regole per cui sono scritti i contenuti. Omesso = 2024. */
+  ruleset?: Ruleset;
+  monsters?: MonsterDef[];
   classes?: ClassDef[];
   subclasses?: SubclassDef[];
   species?: SpeciesDef[];
@@ -482,6 +561,8 @@ export interface ContentPack {
 /* ------------------------------------------------------------------ */
 /* Personaggio (ciò che si salva)                                      */
 /* ------------------------------------------------------------------ */
+
+export type Ruleset = "2014" | "2024";
 
 export type AutomationLevel = "manual" | "assisted" | "full";
 
@@ -708,6 +789,8 @@ export interface ComputedSheet {
   conditionImmunities: string[];
   senses: { sense: string; range: number }[];
   advantages: { on: string; label?: string }[];
+  /** Svantaggi imposti dalle regole (es. Indebolimento nel 2014). */
+  disadvantages: { on: string; label?: string }[];
   proficiencies: { armor: string[]; weapons: string[]; tools: string[]; languages: string[] };
   /** Assente se il personaggio non lancia incantesimi. */
   spellcasting?: ComputedSpellcasting;
