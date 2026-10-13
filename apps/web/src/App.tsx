@@ -1,6 +1,8 @@
-import { BrowserRouter, Route, Routes } from "react-router";
+import { BrowserRouter, NavLink, Route, Routes } from "react-router";
 import { ThemeSwitch } from "./components/ThemeSwitch";
 import { AuthProvider, useAuth } from "./firebase/auth";
+import { Campaign } from "./pages/Campaign";
+import { Campaigns } from "./pages/Campaigns";
 import { Characters } from "./pages/Characters";
 import { Login } from "./pages/Login";
 import { NewCharacter } from "./pages/NewCharacter";
@@ -14,6 +16,12 @@ function TopBar() {
       <a href="/" className="brand">
         Schede & Sessioni
       </a>
+      <span className="topbar-links">
+        <NavLink to="/" end>
+          Personaggi
+        </NavLink>
+        <NavLink to="/campaigns">Campagne</NavLink>
+      </span>
       <span className="topbar-user">
         <ThemeSwitch />
         {localMode ? (
@@ -43,6 +51,8 @@ function Shell() {
         <Route path="/" element={<Characters />} />
         <Route path="/new" element={<NewCharacter />} />
         <Route path="/c/:id" element={<Sheet />} />
+        <Route path="/campaigns" element={<Campaigns />} />
+        <Route path="/campaigns/:id" element={<Campaign />} />
         <Route path="*" element={<Characters />} />
       </Routes>
       <LogStack />

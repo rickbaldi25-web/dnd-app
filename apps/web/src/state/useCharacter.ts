@@ -11,6 +11,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { registry } from "../content";
 import { repo } from "../data";
+import { usePresence } from "./presence";
 import { useAuth } from "../firebase/auth";
 import { useLog } from "./log";
 
@@ -21,6 +22,8 @@ export interface CharacterController {
   ownAutomation?: AutomationLevel;
   sheet: ComputedSheet;
   automation: AutomationLevel;
+  /** Il Master ha fissato l'automazione per tutta la campagna: il giocatore non può cambiarla. */
+  automationLocked: boolean;
   /** Modifica diretta (input dell'utente): si salva sempre. */
   update: (fn: (ch: CharacterData) => CharacterData) => void;
   /** Esito calcolato dal motore: applicato, proposto o solo mostrato secondo l'automazione. */
@@ -59,7 +62,16 @@ export function useCharacter(id: string) {
     setCh(c);
   }), [id]);
 
-  const automation = resolveAutomation({ character: ch?.settings.automation, user: userAutomation });
+  // Se il personaggio è in una campagna: il blocco del Master vince, e chi tiene aperta la scheda risulta connesso.
+  const campaignId = ch?.campaignId;
+  const [campaignLock, setCampaignLock] = useState<AutomationLevel | undefined>();
+  useEffect(() => {
+    setCampaignLock(undefined);
+    return campaignId ? repo.watchCampaign(campaignId, (c) => setCampaignLock(c?.automationLock)) : undefined;
+  }, [campaignId]);
+  usePresence(campaignId);
+
+  const automation = resolveAutomation({ campaignLock, character: ch?.settings.automation, user: userAutomation });
 
   const resolved = useMemo(() => (ch ? { ...ch, settings: { ...ch.settings, automation } } : null), [ch, automation]);
 
@@ -75,9 +87,11 @@ export function useCharacter(id: string) {
 
   const persist = useCallback(
     (next: CharacterData) => {
+      const prev = latest.current;
       latest.current = next;
       setCh(next); // aggiornamento ottimistico
-      repo.saveCharacter(next).catch((e) => push({ title: "Salvataggio non riuscito", lines: [String(e?.message ?? e)], tone: "bad" }));
+      // Solo i campi cambiati rispetto all'ultima versione vista: il resto può averlo toccato qualcun altro.
+      (prev ? repo.updateCharacter(prev, next) : repo.saveCharacter(next)).catch((e) => push({ title: "Salvataggio non riuscito", lines: [String(e?.message ?? e)], tone: "bad" }));
     },
     [push],
   );
@@ -123,7 +137,7 @@ export function useCharacter(id: string) {
 
   const controller: CharacterController | null =
     resolved && sheet
-      ? { ch: resolved, ownAutomation: ch?.settings.automation, sheet, automation, update, act, pending, confirm, cancel }
+      ? { ch: resolved, ownAutomation: ch?.settings.automation, sheet, automation, automationLocked: !!campaignLock, update, act, pending, confirm, cancel }
       : null;
 
   return { loading: ch === undefined, missing: ch === null, broken: !!ch && !sheet, controller };

@@ -1154,3 +1154,115 @@ body:has(.sheet.is-raging) {
   width: 4.5rem;
   min-height: 36px;
 }
+
+/* Campagne e party */
+.topbar-links {
+  display: flex;
+  gap: 1rem;
+  margin-right: auto;
+}
+.topbar-links a {
+  color: var(--muted);
+  text-decoration: none;
+  padding: 0.25rem 0;
+  border-bottom: 2px solid transparent;
+}
+.topbar-links a.active {
+  color: var(--text);
+  border-bottom-color: var(--copper);
+}
+.code-input {
+  width: 9rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+}
+.campaign-code {
+  padding: 0.35rem 0.7rem;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius);
+  letter-spacing: 0.15em;
+  font-weight: 700;
+}
+.campaign-tools {
+  margin: 0 0 var(--gap);
+}
+.party {
+  list-style: none;
+  margin: 0 0 var(--gap);
+  padding: 0;
+  display: grid;
+  gap: var(--gap);
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+.party-card {
+  margin: 0;
+}
+.party-card.is-down {
+  border-color: var(--blood);
+}
+.party-card p {
+  margin: 0.4rem 0;
+}
+.party-hp-number {
+  font-size: var(--step-2);
+  font-variant-numeric: tabular-nums;
+}
+.party-temp {
+  color: var(--verdigris);
+  font-size: var(--step-0);
+}
+.party-bar {
+  display: block;
+  height: 8px;
+  margin-top: 0.3rem;
+  border-radius: 4px;
+  background: var(--line);
+  overflow: hidden;
+}
+.party-bar span {
+  display: block;
+  height: 100%;
+  background: var(--verdigris);
+}
+.party-card.is-down .party-bar span {
+  background: var(--blood);
+}
+.party-stats,
+.party-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.9rem;
+}
+.tag {
+  padding: 0.1rem 0.5rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  font-size: var(--step--1);
+}
+.tag-bad {
+  border-color: var(--blood);
+  color: var(--blood);
+}
+.party-amount {
+  width: 5rem;
+}
+
+/* Presenza e condizioni nel party */
+.presence-dot {
+  display: inline-block;
+  width: 0.6rem;
+  height: 0.6rem;
+  margin-right: 0.4rem;
+  border-radius: 50%;
+  border: 1px solid var(--line-strong);
+  vertical-align: middle;
+}
+.presence-dot.is-online {
+  background: var(--verdigris);
+  border-color: var(--verdigris);
+}
+.tag-btn {
+  background: transparent;
+  cursor: pointer;
+}

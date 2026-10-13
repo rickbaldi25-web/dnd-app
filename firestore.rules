@@ -49,9 +49,32 @@ service cloud.firestore {
     }
 
     match /campaigns/{campaignId} {
-      allow read: if signedIn() && (resource.data.dmUid == uid() || uid() in resource.data.get('memberUids', []));
+      // L'id della campagna è il codice d'invito: chi lo conosce può leggerla (get),
+      // ma non si possono elencare le campagne altrui (list).
+      allow get: if signedIn();
+      allow list: if signedIn() && (resource.data.dmUid == uid() || uid() in resource.data.get('memberUids', []));
       allow create: if signedIn() && request.resource.data.dmUid == uid();
-      allow update, delete: if signedIn() && resource.data.dmUid == uid();
+      allow delete: if signedIn() && resource.data.dmUid == uid();
+      allow update: if signedIn() && (
+        resource.data.dmUid == uid() ||
+        // Chi ha il codice può solo aggiungere se stesso tra i giocatori, nient'altro.
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids']) &&
+          request.resource.data.memberUids.hasAll(resource.data.get('memberUids', [])) &&
+          request.resource.data.memberUids.size() == resource.data.get('memberUids', []).size() + 1 &&
+          uid() in request.resource.data.memberUids) ||
+        // ...oppure togliersi, per uscire dalla campagna.
+        (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids']) &&
+          resource.data.memberUids.hasAll(request.resource.data.memberUids) &&
+          request.resource.data.memberUids.size() == resource.data.memberUids.size() - 1 &&
+          uid() in resource.data.memberUids &&
+          !(uid() in request.resource.data.memberUids))
+      );
+
+      // Chi è connesso: ognuno scrive solo il proprio segnale, i membri leggono quelli di tutti.
+      match /presence/{userId} {
+        allow read: if signedIn() && isMember(campaignId);
+        allow write: if signedIn() && uid() == userId && isMember(campaignId);
+      }
     }
   }
 }

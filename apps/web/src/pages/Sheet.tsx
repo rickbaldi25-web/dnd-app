@@ -79,6 +79,18 @@ export function Sheet() {
   const [lvlOpen, setLvlOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
+  // Lo sfondo reagisce alla vita: da metà PF in giù le luci sfocate crescono (theme.css).
+  const hpCur = c?.ch.state.hpCurrent;
+  const hpMax = c?.sheet.hpMax.value;
+  useEffect(() => {
+    if (hpCur === undefined || !hpMax) return;
+    const low = Math.max(0, Math.min(1, 1 - hpCur / (hpMax / 2)));
+    document.body.style.setProperty("--hp-low", low.toFixed(2));
+    return () => {
+      document.body.style.removeProperty("--hp-low");
+    };
+  }, [hpCur, hpMax]);
+
   if (loading) return <main className="page"><p className="muted">Caricamento della scheda…</p></main>;
   if (missing) return <main className="page"><p>Questo personaggio non esiste o non hai accesso.</p><Link to="/">Torna ai personaggi</Link></main>;
   if (broken || !c) return <main className="page"><p>La scheda contiene dati che il motore non riconosce. Controlla la console per i dettagli.</p></main>;
@@ -123,6 +135,7 @@ export function Sheet() {
 
         {settingsOpen && (
           <section className="panel settings">
+            {c.automationLocked && <p className="muted small">Il Master ha fissato l'automazione per tutta la campagna: la scelta qui sotto torna a valere quando toglie il blocco.</p>}
             <AutomationSwitch
               value={c.ownAutomation}
               inherited={pref ?? "assisted"}
