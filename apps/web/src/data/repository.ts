@@ -62,6 +62,8 @@ export interface PlanEntry {
 export interface EncounterPlan {
   id: string;
   name: string;
+  /** Capitolo dell'avventura a cui appartiene, per raggrupparli. */
+  chapter?: string;
   entries: PlanEntry[];
 }
 

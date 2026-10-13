@@ -1087,3 +1087,29 @@ select option {
   font-weight: 800;
   color: var(--heading);
 }
+
+/* Incontri: filtri e capitoli */
+.plan-filters {
+  margin: 0.5rem 0;
+}
+.plan-filters input[type="search"] {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+.plan-chapter {
+  margin-top: 0.5rem;
+}
+.chapter-head {
+  width: 100%;
+  padding: 0.4rem 0.6rem;
+  border-radius: 10px;
+  background: var(--field);
+  color: var(--heading);
+}
+.plan-chapter .plan-list {
+  margin: 0 0 0 0.6rem;
+}
+.quick-encounters .quick-list {
+  max-height: 22rem;
+  overflow-y: auto;
+}

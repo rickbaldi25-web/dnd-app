@@ -7,6 +7,15 @@ import { AddMonster, useEncounter, withMonsters } from "./Initiative";
 const DIFFICULTY: Record<EncounterDifficulty, string> = { trivial: "Banale", easy: "Facile", medium: "Medio", hard: "Difficile", deadly: "Mortale" };
 const pe = (n: number) => n.toLocaleString("it-IT");
 
+/** Capitoli presenti, nell'ordine in cui compaiono. */
+const chaptersOf = (plans: EncounterPlan[]) => [...new Set(plans.map((p) => p.chapter ?? "").filter(Boolean))];
+/** La ricerca guarda il nome dell'incontro e quello dei mostri. */
+function matchesPlan(plan: EncounterPlan, query: string, chapter: string): boolean {
+  if (chapter && (plan.chapter ?? "") !== chapter) return false;
+  const q = query.trim().toLowerCase();
+  return !q || plan.name.toLowerCase().includes(q) || plan.entries.some((e) => e.name.toLowerCase().includes(q));
+}
+
 /** Porta i mostri di un incontro preparato in combattimento: lo apre se non ce n'è uno, altrimenti li aggiunge. */
 function startPlan(campaignId: string, encounter: Encounter | null, secrets: Record<string, MonsterSecret>, plan: EncounterPlan): Promise<unknown> {
   const running = encounter?.active ? encounter : { active: true, round: 1, monsters: [] };
@@ -29,7 +38,11 @@ export function QuickEncounters({ campaignId, party, onPrepare }: { campaignId: 
   useEffect(() => repo.watchEncounterPlans(campaignId, setPlans), [campaignId]);
   const failed = (e: unknown) => push({ title: "Salvataggio non riuscito", lines: [String(e instanceof Error ? e.message : e)], tone: "bad" });
   const levels = party.map((ch) => Math.max(1, ch.levels.length));
-  const ready = plans.filter((p) => p.entries.length > 0);
+  const [query, setQuery] = useState("");
+  const [chapter, setChapter] = useState("");
+  const all = plans.filter((p) => p.entries.length > 0);
+  const chapters = chaptersOf(all);
+  const ready = all.filter((p) => matchesPlan(p, query, chapters.includes(chapter) ? chapter : ""));
   return (
     <section className="panel quick-encounters">
       <div className="row between">
@@ -38,7 +51,23 @@ export function QuickEncounters({ campaignId, party, onPrepare }: { campaignId: 
           Prepara
         </button>
       </div>
-      {ready.length === 0 && <p className="muted small">Nessun incontro preparato. Puoi iniziare un combattimento vuoto e aggiungere i mostri al momento.</p>}
+      {(all.length > 5 || chapters.length > 0) && (
+        <div className="row plan-filters">
+          <input type="search" value={query} placeholder="Cerca incontro o mostro" aria-label="Cerca tra gli incontri pronti" onChange={(e) => setQuery(e.currentTarget.value)} />
+          {chapters.length > 0 && (
+            <select value={chapter} aria-label="Capitolo" onChange={(e) => setChapter(e.currentTarget.value)}>
+              <option value="">Tutti i capitoli</option>
+              {chapters.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+      )}
+      {all.length === 0 && <p className="muted small">Nessun incontro preparato. Puoi iniziare un combattimento vuoto e aggiungere i mostri al momento.</p>}
+      {all.length > 0 && ready.length === 0 && <p className="muted small">Nessun incontro corrisponde.</p>}
       <ul className="quick-list">
         {ready.map((plan) => {
           const rating = rateEncounter(levels, plan.entries);
@@ -78,6 +107,10 @@ export function EncounterBuilder({ campaignId, party, onLaunch }: { campaignId: 
   const [secrets, setSecrets] = useState<Record<string, MonsterSecret>>({});
   const [openId, setOpenId] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
+  const [query, setQuery] = useState("");
+  const [chapterFilter, setChapterFilter] = useState("");
+  const [difficulty, setDifficulty] = useState<EncounterDifficulty | "">("");
+  const [closed, setClosed] = useState<string[]>([]);
   useEffect(() => repo.watchEncounterPlans(campaignId, setPlans), [campaignId]);
   useEffect(() => repo.watchMonsterSecrets(campaignId, setSecrets), [campaignId]);
 
@@ -90,9 +123,16 @@ export function EncounterBuilder({ campaignId, party, onLaunch }: { campaignId: 
   const levels = party.map((ch) => Math.max(1, ch.levels.length));
   const budget = rateEncounter(levels, []).thresholds;
 
+  const chapters = chaptersOf(plans);
+  const chapter = chapters.includes(chapterFilter) ? chapterFilter : "";
+  const filtering = !!query.trim() || !!difficulty;
+  const visible = plans.filter((p) => matchesPlan(p, query, chapter) && (!difficulty || rateEncounter(levels, p.entries).difficulty === difficulty));
+  // Un gruppo per capitolo, nell'ordine in cui compaiono; in fondo gli incontri senza capitolo.
+  const groups = [...chapters, ""].map((c) => ({ chapter: c, plans: visible.filter((p) => (p.chapter ?? "") === c) })).filter((g) => g.plans.length > 0);
   const create = () => {
     const id = `p-${Date.now().toString(36)}`;
-    save([...plans, { id, name: newName.trim() || `Incontro ${plans.length + 1}`, entries: [] }]);
+    // Con un capitolo scelto nel filtro, il nuovo incontro nasce lì.
+    save([...plans, { id, name: newName.trim() || `Incontro ${plans.length + 1}`, ...(chapter ? { chapter } : {}), entries: [] }]);
     setNewName("");
     setOpenId(id);
   };
@@ -110,8 +150,55 @@ export function EncounterBuilder({ campaignId, party, onLaunch }: { campaignId: 
           ? `Gruppo di ${levels.length} (livelli ${levels.join(", ")}) · soglie di PE: facile ${pe(budget.easy)}, medio ${pe(budget.medium)}, difficile ${pe(budget.hard)}, mortale ${pe(budget.deadly)}`
           : "Collega dei personaggi alla campagna per avere il giudizio di difficoltà."}
       </p>
+      {plans.length > 0 && (
+        <div className="row plan-filters">
+          <input type="search" value={query} placeholder="Cerca incontro o mostro" aria-label="Cerca tra gli incontri" onChange={(e) => setQuery(e.currentTarget.value)} />
+          {chapters.length > 0 && (
+            <select value={chapter} aria-label="Capitolo" onChange={(e) => setChapterFilter(e.currentTarget.value)}>
+              <option value="">Tutti i capitoli</option>
+              {chapters.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          )}
+          {levels.length > 0 && (
+            <select value={difficulty} aria-label="Difficoltà" onChange={(e) => setDifficulty(e.currentTarget.value as EncounterDifficulty | "")}>
+              <option value="">Ogni difficoltà</option>
+              {(Object.keys(DIFFICULTY) as EncounterDifficulty[]).map((d) => (
+                <option key={d} value={d}>
+                  {DIFFICULTY[d]}
+                </option>
+              ))}
+            </select>
+          )}
+          {visible.length !== plans.length && (
+            <span className="muted small">
+              {visible.length} di {plans.length}
+            </span>
+          )}
+        </div>
+      )}
+      {plans.length > 0 && visible.length === 0 && <p className="muted small">Nessun incontro corrisponde.</p>}
+      <datalist id="capitoli-incontri">
+        {chapters.map((c) => (
+          <option key={c} value={c} />
+        ))}
+      </datalist>
+      {groups.map((g) => {
+        // Cercando si aprono tutti i capitoli: altrimenti i risultati resterebbero nascosti.
+        const shut = !filtering && closed.includes(g.chapter);
+        return (
+        <div key={g.chapter || "-"} className="plan-chapter">
+          {chapters.length > 0 && (
+            <button className="disclosure chapter-head" aria-expanded={!shut} onClick={() => setClosed(shut ? closed.filter((c) => c !== g.chapter) : [...closed, g.chapter])}>
+              {g.chapter || "Senza capitolo"} <span className="muted small">{g.plans.length}</span>
+            </button>
+          )}
+          {!shut && (
       <ul className="plan-list">
-        {plans.map((plan) => {
+        {g.plans.map((plan) => {
           const rating = rateEncounter(levels, plan.entries);
           const total = plan.entries.reduce((n, e) => n + e.count, 0);
           const unrated = plan.entries.filter((e) => !e.cr).length;
@@ -140,6 +227,22 @@ export function EncounterBuilder({ campaignId, party, onLaunch }: { campaignId: 
                   <label className="small">
                     Nome{" "}
                     <input defaultValue={plan.name} key={plan.name} aria-label="Nome dell'incontro" onBlur={(e) => e.currentTarget.value.trim() && e.currentTarget.value.trim() !== plan.name && patch(plan.id, { name: e.currentTarget.value.trim() })} />
+                  </label>
+                  <label className="small">
+                    Capitolo{" "}
+                    <input
+                      defaultValue={plan.chapter ?? ""}
+                      key={plan.chapter ?? ""}
+                      list="capitoli-incontri"
+                      placeholder="nessuno"
+                      aria-label="Capitolo dell'incontro"
+                      onBlur={(e) => {
+                        const v = e.currentTarget.value.trim();
+                        if (v === (plan.chapter ?? "")) return;
+                        const { chapter: _old, ...rest } = plan;
+                        save(plans.map((p) => (p.id === plan.id ? { ...rest, ...(v ? { chapter: v } : {}) } : p)));
+                      }}
+                    />
                   </label>
                   {plan.entries.length > 0 && (
                     <ul className="plan-entries">
@@ -194,6 +297,10 @@ export function EncounterBuilder({ campaignId, party, onLaunch }: { campaignId: 
           );
         })}
       </ul>
+          )}
+        </div>
+        );
+      })}
       <div className="row">
         <input value={newName} placeholder="Nome del nuovo incontro" aria-label="Nome del nuovo incontro" onChange={(e) => setNewName(e.currentTarget.value)} onKeyDown={(e) => e.key === "Enter" && create()} />
         <button className="btn" onClick={create}>
