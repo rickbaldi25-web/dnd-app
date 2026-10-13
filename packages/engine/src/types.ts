@@ -66,6 +66,8 @@ export type Condition =
  *  attack.melee / attack.ranged / attack.all
  *  damage.str          danni degli attacchi che usano Forza (es. Ira)
  *  crit.range          soglia critico (min wins)
+ *  spell.dc            CD del tiro salvezza degli incantesimi
+ *  spell.attack        tiro per colpire degli incantesimi
  */
 export type NumericTarget = string;
 
@@ -165,6 +167,95 @@ export interface Feature {
   choices?: ChoiceDef[];
   widgets?: WidgetRef[];
   toggles?: { id: string; name: string; when?: Condition }[];
+  /** Incantesimi concessi dal privilegio (di dominio, di specie, di talento...). */
+  spells?: GrantedSpell[];
+}
+
+/* ------------------------------------------------------------------ */
+/* Incantesimi                                                         */
+/* ------------------------------------------------------------------ */
+
+export type SpellSchool =
+  | "abjuration"
+  | "conjuration"
+  | "divination"
+  | "enchantment"
+  | "evocation"
+  | "illusion"
+  | "necromancy"
+  | "transmutation";
+
+/** Il tiro "principale" di un incantesimo, quello che la scheda può fare da sola. */
+export interface SpellRollDef {
+  kind: "damage" | "heal" | "tempHp";
+  dice: string; // "8d6"
+  damageType?: string;
+  /** Aggiunge il modificatore della caratteristica da incantatore. */
+  addMod?: boolean;
+  /** Dadi in più per ogni livello di slot sopra quello dell'incantesimo, es. "1d6". */
+  perSlotLevel?: string;
+  /** Trucchetti: i dadi raddoppiano, triplicano e quadruplicano ai livelli 5, 11 e 17. */
+  cantripScaling?: boolean;
+}
+
+export interface SpellDef {
+  id: string;
+  name: string;
+  /** 0 = trucchetto. */
+  level: number;
+  school: SpellSchool;
+  castingTime: string; // "Azione", "Azione bonus", "1 minuto"...
+  timing?: ActionTiming;
+  range: string;
+  components: string; // "V, S, M (un pizzico di zolfo)"
+  duration: string;
+  concentration?: boolean;
+  ritual?: boolean;
+  /** Liste di incantesimi a cui appartiene: di norma gli id delle classi. */
+  lists: string[];
+  description: string;
+  higherLevels?: string;
+  attack?: "melee" | "ranged";
+  save?: Ability;
+  roll?: SpellRollDef;
+}
+
+/**
+ * Progressione degli slot:
+ * - full   incantatore pieno (Mago, Chierico...)
+ * - half   mezzo incantatore (Paladino, Ranger)
+ * - third  un terzo (sottoclassi come il Cavaliere Mistico)
+ * - pact   Magia del Patto: pochi slot, tutti dello stesso livello, a riposo breve
+ */
+export type CasterProgression = "full" | "half" | "third" | "pact";
+
+export interface SpellcastingDef {
+  ability: Ability;
+  progression: CasterProgression;
+  /** Lista da cui si scelgono gli incantesimi (di norma l'id della classe). */
+  list: string;
+  /** Trucchetti conosciuti per livello di classe (values[0] = livello 1). */
+  cantrips?: number[];
+  /** Incantesimi preparati per livello di classe. */
+  prepared: number[];
+  /** Livello di classe da cui si lanciano incantesimi. Omesso = 1. */
+  fromLevel?: number;
+  /** Quando si possono cambiare gli incantesimi preparati. Informativo. */
+  changeOn?: "longRest" | "levelUp";
+  /** Il Mago prepara dal proprio libro degli incantesimi. */
+  spellbook?: boolean;
+}
+
+export interface GrantedSpell {
+  spellId: string;
+  /** Livello minimo per averlo, es. gli incantesimi di dominio di 3° al livello 5 da Chierico. */
+  minLevel?: { by: "total" | string; level: number };
+  /** Classe con cui lo si lancia. Omesso = la classe del privilegio. */
+  source?: string;
+  /** Caratteristica da incantatore quando non dipende da una classe (specie, talenti). */
+  ability?: Ability;
+  /** Risorsa che permette di lanciarlo senza slot (es. 1 volta per riposo lungo). */
+  resource?: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -196,6 +287,7 @@ export interface ClassDef {
   /** Armi ammesse per la Maestria (es. Barbaro: solo mischia). Omesso = tutte. */
   weaponMasteryFrom?: string[];
   subclassLevel: number;
+  spellcasting?: SpellcastingDef;
   features: Feature[];
 }
 
@@ -203,6 +295,8 @@ export interface SubclassDef {
   id: string;
   classId: string;
   name: string;
+  /** Per le sottoclassi che danno incantesimi a una classe che non ne ha. */
+  spellcasting?: SpellcastingDef;
   features: Feature[];
 }
 
@@ -294,6 +388,7 @@ export interface ContentPack {
   feats?: FeatDef[];
   items?: ItemDef[];
   skills?: SkillDef[];
+  spells?: SpellDef[];
 }
 
 /* ------------------------------------------------------------------ */
@@ -326,6 +421,18 @@ export interface CharacterState {
   exhaustion: number; // 0-6
   deathSaves: { success: number; failure: number };
   heroicInspiration: boolean;
+  /** Slot spesi per livello di incantesimo ("1".."9"). Opzionali: i personaggi salvati prima non li hanno. */
+  spellSlotsSpent?: Record<string, number>;
+  pactSlotsSpent?: number;
+  concentration?: { spellId: string; name: string } | null;
+}
+
+/** Incantesimi scelti per una classe da incantatore. */
+export interface SpellSelection {
+  cantrips: string[];
+  prepared: string[];
+  /** Solo per chi ha un libro degli incantesimi. */
+  spellbook?: string[];
 }
 
 export interface CharacterData {
@@ -344,6 +451,8 @@ export interface CharacterData {
   backgroundBoosts: Partial<Record<Ability, number>>;
   /** Scelte fatte: chiave = ChoiceDef.id, valore = opzioni scelte. */
   choices: Record<string, string[]>;
+  /** Incantesimi scelti: chiave = id della classe da incantatore. */
+  spells?: Record<string, SpellSelection>;
   equipment: EquipmentEntry[];
   state: CharacterState;
   settings: { automation?: AutomationLevel };
@@ -402,6 +511,66 @@ export interface ComputedAttack {
   critRange: number;
 }
 
+export interface SlotPool {
+  level: number;
+  max: number;
+  spent: number;
+  remaining: number;
+}
+
+/** Una classe (o sottoclasse) con cui il personaggio lancia incantesimi. */
+export interface ComputedSpellSource {
+  id: string; // id della classe
+  name: string;
+  ability: Ability;
+  progression: CasterProgression;
+  list: string;
+  saveDC: Stat;
+  attackBonus: Stat;
+  cantripsMax: number;
+  preparedMax: number;
+  /** Livello massimo degli incantesimi che si possono preparare con questa classe. */
+  maxSpellLevel: number;
+  cantrips: string[];
+  prepared: string[];
+  changeOn?: "longRest" | "levelUp";
+  spellbook: boolean;
+}
+
+/** Un incantesimo che il personaggio può lanciare adesso. */
+export interface ComputedSpell {
+  spellId: string;
+  name: string;
+  level: number;
+  school: SpellSchool;
+  sourceId: string;
+  sourceName: string;
+  ability: Ability;
+  /** Sempre preparato (dominio, giuramento, specie): non conta nel numero dei preparati. */
+  always: boolean;
+  concentration: boolean;
+  ritual: boolean;
+  castingTime: string;
+  range: string;
+  attackBonus?: number;
+  save?: Ability;
+  saveDC?: number;
+  /** Dadi del tiro principale al livello base, es. "8d6" o "1d8+3". */
+  roll?: string;
+  /** Risorsa che permette di lanciarlo senza slot. */
+  resource?: string;
+}
+
+export interface ComputedSpellcasting {
+  sources: ComputedSpellSource[];
+  /** Slot condivisi fra le classi (regola del multiclasse). */
+  slots: SlotPool[];
+  /** Slot della Magia del Patto: separati, tornano con il riposo breve. */
+  pact?: SlotPool;
+  concentration?: { spellId: string; name: string };
+  spells: ComputedSpell[];
+}
+
 export interface ComputedSheet {
   automation: AutomationLevel;
   level: number;
@@ -432,5 +601,7 @@ export interface ComputedSheet {
   senses: { sense: string; range: number }[];
   advantages: { on: string; label?: string }[];
   proficiencies: { armor: string[]; weapons: string[]; tools: string[]; languages: string[] };
+  /** Assente se il personaggio non lancia incantesimi. */
+  spellcasting?: ComputedSpellcasting;
   issues: Issue[];
 }

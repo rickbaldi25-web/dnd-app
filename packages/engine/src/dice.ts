@@ -59,6 +59,14 @@ export function parseDice(expr: string): ParsedDice {
   return out;
 }
 
+/** Inverso di parseDice: { dice: [2d6], flat: 3 } -> "2d6+3". */
+export function formatDice(p: ParsedDice): string {
+  let out = "";
+  for (const d of p.dice) out += `${d.sign < 0 ? "-" : out ? "+" : ""}${d.count}d${d.sides}`;
+  if (p.flat !== 0 || !out) out += `${p.flat < 0 ? "-" : out ? "+" : ""}${Math.abs(p.flat)}`;
+  return out;
+}
+
 export interface RollResult {
   expr: string;
   rolls: { sides: number; value: number; sign: 1 | -1 }[];

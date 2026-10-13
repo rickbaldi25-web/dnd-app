@@ -3,6 +3,7 @@ export * from "./values.js";
 export * from "./dice.js";
 export * from "./registry.js";
 export * from "./automation.js";
+export * from "./spells.js";
 export * from "./compute.js";
 export * from "./validate.js";
 export * from "./patch.js";

@@ -1,6 +1,7 @@
 import { AUTOMATION_POLICY, DEFAULT_AUTOMATION } from "./automation.js";
 import { withFlat } from "./dice.js";
 import { featsByTag, must, type Registry } from "./registry.js";
+import { computeSpellcasting } from "./spells.js";
 import {
   ABILITIES,
   type Ability,
@@ -34,6 +35,8 @@ export interface ComputeOptions {
 interface ActiveFeature {
   feature: Feature;
   source: string;
+  /** Classe a cui appartiene il privilegio (anche tramite la sottoclasse). */
+  classId?: string;
 }
 
 /** Widget sempre presenti nella scheda, in ordine di default. */
@@ -103,12 +106,12 @@ export function collectFeatures(ch: CharacterData, reg: Registry, classLevels: R
         source: cls.name,
       });
     }
-    for (const f of cls.features) if ((f.level ?? 1) <= lvl) active.push({ feature: f, source: cls.name });
+    for (const f of cls.features) if ((f.level ?? 1) <= lvl) active.push({ feature: f, source: cls.name, classId });
     if (lvl >= cls.subclassLevel) {
       choices.push({ id: `${classId}.subclass`, kind: "subclass", label: `Sottoclasse (${cls.name})`, count: 1, source: cls.name });
       const subId = ch.subclasses[classId];
       const sub = subId ? reg.subclasses.get(subId) : undefined;
-      if (sub) for (const f of sub.features) if ((f.level ?? 1) <= lvl) active.push({ feature: f, source: sub.name });
+      if (sub) for (const f of sub.features) if ((f.level ?? 1) <= lvl) active.push({ feature: f, source: sub.name, classId });
     }
   }
 
@@ -125,7 +128,7 @@ export function collectFeatures(ch: CharacterData, reg: Registry, classLevels: R
         const feat = reg.feats.get(featId);
         if (!feat || seenFeats.has(feat.id)) continue;
         seenFeats.add(feat.id);
-        active.push({ feature: feat.feature, source: `${feature.name}: ${feat.name}` });
+        active.push({ feature: feat.feature, source: `${feature.name}: ${feat.name}`, classId: active[i]!.classId });
       }
     }
   }
@@ -424,6 +427,24 @@ export function computeSheet(ch: CharacterData, reg: Registry, opts: ComputeOpti
     }
   }
 
+  /* --- incantesimi --- */
+  const spellcasting = computeSpellcasting({
+    ch,
+    reg,
+    classLevels,
+    totalLevel,
+    proficiencyBonus,
+    mods,
+    d20Penalty,
+    granted: active.flatMap(({ feature, classId }) =>
+      (feature.spells ?? []).map((spell) => ({ spell, classId, featureId: feature.id, featureName: feature.name })),
+    ),
+    bonusParts,
+    stat,
+    validate: policy.validation !== "off",
+    issues,
+  });
+
   /* --- scelte in sospeso --- */
   const pendingChoices: ComputedSheet["pendingChoices"] = [];
   for (const c of choices) {
@@ -470,6 +491,7 @@ export function computeSheet(ch: CharacterData, reg: Registry, opts: ComputeOpti
       tools: [...toolProf],
       languages: unique(grants("language")),
     },
+    spellcasting,
     issues: policy.validation === "off" ? issues.filter((i) => i.code.startsWith("override")) : issues,
   };
 }

@@ -6,6 +6,7 @@ import type {
   ItemDef,
   SkillDef,
   SpeciesDef,
+  SpellDef,
   SubclassDef,
 } from "./types.js";
 
@@ -23,6 +24,7 @@ export interface Registry {
   feats: Map<string, FeatDef>;
   items: Map<string, ItemDef>;
   skills: Map<string, SkillDef>;
+  spells: Map<string, SpellDef>;
 }
 
 export function createRegistry(...packs: ContentPack[]): Registry {
@@ -35,6 +37,7 @@ export function createRegistry(...packs: ContentPack[]): Registry {
     feats: new Map(),
     items: new Map(),
     skills: new Map(),
+    spells: new Map(),
   };
   for (const p of packs) {
     r.packs.push(p.id);
@@ -45,6 +48,7 @@ export function createRegistry(...packs: ContentPack[]): Registry {
     for (const x of p.feats ?? []) r.feats.set(x.id, x);
     for (const x of p.items ?? []) r.items.set(x.id, x);
     for (const x of p.skills ?? []) r.skills.set(x.id, x);
+    for (const x of p.spells ?? []) r.spells.set(x.id, x);
   }
   return r;
 }

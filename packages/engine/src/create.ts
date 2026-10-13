@@ -13,6 +13,9 @@ export function emptyState(): CharacterState {
     exhaustion: 0,
     deathSaves: { success: 0, failure: 0 },
     heroicInspiration: false,
+    spellSlotsSpent: {},
+    pactSlotsSpent: 0,
+    concentration: null,
   };
 }
 
