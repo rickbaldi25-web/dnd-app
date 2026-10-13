@@ -17,7 +17,7 @@ import {
   where,
   type Firestore,
 } from "firebase/firestore";
-import { newCampaignCode, type Campaign, type Presence, type Repository, type UserPrefs } from "./repository";
+import { newCampaignCode, type Campaign, type Encounter, type MonsterSecret, type Presence, type Repository, type UserPrefs } from "./repository";
 
 /** Toglie i campi tecnici di Firestore prima di passare il personaggio al motore. */
 function toCharacter(id: string, data: Record<string, unknown>): CharacterData {
@@ -106,6 +106,19 @@ export function firestoreRepo(db: Firestore): Repository {
     async leaveCampaign(id, uid) {
       await updateDoc(doc(campaigns, id), { memberUids: arrayRemove(uid) });
       await deleteDoc(doc(presence(id), uid)).catch(() => undefined);
+    },
+    watchEncounter(campaignId, cb) {
+      return onSnapshot(doc(db, "campaigns", campaignId, "state", "encounter"), (d) => cb(d.exists() ? (d.data() as Encounter) : null), () => cb(null));
+    },
+    async saveEncounter(campaignId, encounter) {
+      await setDoc(doc(db, "campaigns", campaignId, "state", "encounter"), encounter);
+    },
+    watchMonsterSecrets(campaignId, cb) {
+      const ref = doc(db, "campaigns", campaignId, "secret", "encounter");
+      return onSnapshot(ref, (d) => cb(((d.data()?.monsters as Record<string, MonsterSecret>) ?? {})), () => cb({}));
+    },
+    async saveMonsterSecrets(campaignId, secrets) {
+      await setDoc(doc(db, "campaigns", campaignId, "secret", "encounter"), { monsters: secrets });
     },
     async touchPresence(campaignId, user) {
       await setDoc(doc(presence(campaignId), user.uid), { name: user.name, at: Date.now() });

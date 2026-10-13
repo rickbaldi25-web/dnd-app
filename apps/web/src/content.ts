@@ -1,5 +1,5 @@
 import { srd } from "@dnd/content-srd";
-import { ABILITIES, createRegistry, type ContentPack } from "@dnd/engine";
+import { ABILITIES, createRegistry, type ContentPack, type MonsterDef } from "@dnd/engine";
 
 /**
  * Contenuti importati dai compendi (packages/importer). La cartella è esclusa da git:
@@ -20,6 +20,16 @@ const packs = Object.entries(imported)
  * i pacchetti homebrew della campagna e del giocatore.
  */
 export const registry = packs.length ? createRegistry(...packs) : createRegistry(srd);
+
+/** I mostri importati: un file grande, caricato solo quando il Master ne cerca uno. */
+const monsterFiles = import.meta.glob<{ monsters?: MonsterDef[] }>("../../../packages/content-private/generated/*.monsters.json", { import: "default" });
+let monsters: Promise<MonsterDef[]> | undefined;
+export function loadMonsters(): Promise<MonsterDef[]> {
+  monsters ??= Promise.all(Object.values(monsterFiles).map((load) => load())).then((files) =>
+    files.flatMap((f) => f.monsters ?? []).sort((a, b) => a.name.localeCompare(b.name, "it")),
+  );
+  return monsters;
+}
 
 /** Nelle regole 2014 le specie si chiamano razze. */
 export const SPECIES_LABEL = registry.ruleset === "2014" ? "Razza" : "Specie";

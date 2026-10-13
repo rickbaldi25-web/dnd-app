@@ -441,7 +441,7 @@ export function ActionsWidget({ c }: WidgetProps) {
     push({ title: d.name, lines: d.damageType ? [DAMAGE_TYPES[d.damageType] ?? d.damageType] : [], rolls: [{ label: d.name, expr: d.expr, dice: r.rolls.map((x) => x.value), total: r.total }] });
   };
   return (
-    <Panel title="Azioni di classe">
+    <Panel title="Azioni di classe" className="actions-panel">
       <ul className="action-list">
         {dice.map((d) => (
           <li key={d.id}>
@@ -478,7 +478,7 @@ export function AttacksWidget({ c }: WidgetProps) {
   const reckless = !!c.ch.state.toggles.reckless;
   if (!c.sheet.attacks.length) {
     return (
-      <Panel title="Attacchi">
+      <Panel title="Attacchi" className="attacks-panel">
         <p className="muted">Equipaggia un'arma dall'inventario per vederla qui.</p>
       </Panel>
     );
@@ -501,7 +501,7 @@ export function AttacksWidget({ c }: WidgetProps) {
     });
   };
   return (
-    <Panel title="Attacchi">
+    <Panel title="Attacchi" className="attacks-panel">
       <table className="attack-table">
         <thead>
           <tr>
@@ -552,7 +552,7 @@ export function ConditionsWidget({ c }: WidgetProps) {
     }));
   const setExh = (n: number) => c.update((ch) => ({ ...ch, state: { ...ch.state, exhaustion: Math.max(0, Math.min(6, n)) } }));
   return (
-    <Panel title="Condizioni">
+    <Panel title="Condizioni" className="conditions-panel">
       <div className="chips">
         {Object.entries(CONDITIONS).map(([k, v]) => (
           <button key={k} className={`chip ${conditions.includes(k) ? "is-on" : ""}`} aria-pressed={conditions.includes(k)} onClick={() => toggle(k)}>
@@ -583,7 +583,7 @@ export function HitDiceWidget({ c }: WidgetProps) {
   const [spend, setSpend] = useState<Partial<Record<Die, number>>>({});
   const total = Object.values(spend).reduce((a, b) => a + (b ?? 0), 0);
   return (
-    <Panel title="Dadi Vita e riposi">
+    <Panel title="Dadi Vita e riposi" className="hitdice-panel">
       <ul className="hd-list">
         {c.sheet.hitDice.map((h) => {
           const left = h.total - h.spent;
@@ -631,7 +631,7 @@ export function HitDiceWidget({ c }: WidgetProps) {
 export function AbilitiesWidget({ c }: WidgetProps) {
   const roller = useRoller();
   return (
-    <Panel title="Caratteristiche">
+    <Panel title="Caratteristiche" className="abilities-panel">
       <div className="ability-grid">
         {ABILITIES.map((a) => {
           const v = c.sheet.abilities[a];
@@ -651,7 +651,7 @@ export function AbilitiesWidget({ c }: WidgetProps) {
 export function SavesWidget({ c }: WidgetProps) {
   const roller = useRoller();
   return (
-    <Panel title="Tiri salvezza">
+    <Panel title="Tiri salvezza" className="saves-panel">
       <ul className="check-list">
         {ABILITIES.map((a) => {
           const s = c.sheet.saves[a];
@@ -675,7 +675,7 @@ export function SkillsWidget({ c }: WidgetProps) {
   const roller = useRoller();
   const list = Object.entries(c.sheet.skills).sort(([, a], [, b]) => a.name.localeCompare(b.name, "it"));
   return (
-    <Panel title="Abilità">
+    <Panel title="Abilità" className="skills-panel">
       <ul className="check-list">
         {list.map(([id, s]) => (
           <li key={id}>
@@ -696,7 +696,7 @@ export function SkillsWidget({ c }: WidgetProps) {
 
 export function FeaturesWidget({ c }: WidgetProps) {
   return (
-    <Panel title="Privilegi e tratti">
+    <Panel title="Privilegi e tratti" className="features-panel">
       <div className="feature-list">
         {c.sheet.features.map((f) => (
           <details key={f.id}>
@@ -722,7 +722,7 @@ export function InventoryWidget({ c }: WidgetProps) {
       return { ...ch, equipment };
     });
   return (
-    <Panel title="Inventario">
+    <Panel title="Inventario" className="inventory-panel">
       {c.ch.equipment.length === 0 && <p className="muted">Nessun oggetto. Aggiungine uno qui sotto.</p>}
       <ul className="inv-list">
         {c.ch.equipment.map((e, i) => (
@@ -767,7 +767,7 @@ export function NotesWidget({ c }: WidgetProps) {
   const [text, setText] = useState(c.ch.notes ?? "");
   useEffect(() => setText(c.ch.notes ?? ""), [c.ch.notes]);
   return (
-    <Panel title="Note">
+    <Panel title="Note" className="notes-panel">
       <textarea
         className="notes"
         rows={6}

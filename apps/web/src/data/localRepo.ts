@@ -1,11 +1,31 @@
 import { applyFieldChanges, diffFields, type CharacterData } from "@dnd/engine";
-import { newCampaignCode, type Campaign, type Presence, type Repository, type UserPrefs } from "./repository";
+import { newCampaignCode, type Campaign, type Encounter, type MonsterSecret, type Presence, type Repository, type UserPrefs } from "./repository";
 
 const KEY = "dnd.characters.v1";
 const PREFS = "dnd.prefs.v1";
 const CAMPAIGNS = "dnd.campaigns.v1";
 /** Presenze solo in memoria: in modalità locale c'è un utente solo. */
 const presences = new Map<string, Presence[]>();
+const ENCOUNTERS = "dnd.encounters.v1";
+type StoredEncounter = { encounter?: Encounter; secrets?: Record<string, MonsterSecret> };
+
+function readEncounters(): Record<string, StoredEncounter> {
+  try {
+    return JSON.parse(localStorage.getItem(ENCOUNTERS) ?? "{}");
+  } catch {
+    return {};
+  }
+}
+function writeEncounter(campaignId: string, patch: StoredEncounter) {
+  const all = readEncounters();
+  all[campaignId] = { ...all[campaignId], ...patch };
+  try {
+    localStorage.setItem(ENCOUNTERS, JSON.stringify(all));
+  } catch {
+    /* storage pieno o bloccato */
+  }
+  notify();
+}
 
 type Listener = () => void;
 const listeners = new Set<Listener>();
@@ -126,6 +146,24 @@ export const localRepo: Repository = {
     if (!all[id]) return;
     all[id].memberUids = all[id].memberUids.filter((u) => u !== uid);
     writeCampaigns(all);
+  },
+  watchEncounter(campaignId, cb) {
+    const emit = () => cb(readEncounters()[campaignId]?.encounter ?? null);
+    listeners.add(emit);
+    emit();
+    return () => listeners.delete(emit);
+  },
+  async saveEncounter(campaignId, encounter) {
+    writeEncounter(campaignId, { encounter });
+  },
+  watchMonsterSecrets(campaignId, cb) {
+    const emit = () => cb(readEncounters()[campaignId]?.secrets ?? {});
+    listeners.add(emit);
+    emit();
+    return () => listeners.delete(emit);
+  },
+  async saveMonsterSecrets(campaignId, secrets) {
+    writeEncounter(campaignId, { secrets });
   },
   async touchPresence(campaignId, user) {
     const rest = (presences.get(campaignId) ?? []).filter((p) => p.uid !== user.uid);

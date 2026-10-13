@@ -490,9 +490,75 @@ textarea {
     grid-column: 1 / -1;
   }
 }
+/*
+ * Desktop: griglia a 12 colonne, riquadri incastrati per importanza.
+ *   gioco:  Attacchi (6) · Condizioni (3) · Dadi Vita (3), poi Azioni e Incantesimi
+ *   scheda: Caratteristiche (3) · Tiri salvezza (3) · Abilità (6), poi Privilegi (6) · Inventario (3) · Note (3)
+ * "dense" fa risalire i riquadri piccoli nei posti liberi.
+ */
 @media (min-width: 1100px) {
+  /* La scheda usa la larghezza dello schermo, con o senza il pannello della campagna. */
+  .page.sheet {
+    max-width: 1500px;
+  }
+  .zone-play,
   .zone-sheet {
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    grid-auto-flow: dense;
+    align-items: stretch;
+  }
+  .zone-play .cell,
+  .zone-sheet .cell {
+    grid-column: span 3;
+  }
+  .zone-play .cell:has(.attacks-panel),
+  .zone-sheet .cell:has(.skills-panel),
+  .zone-sheet .cell:has(.features-panel) {
+    grid-column: span 6;
+  }
+  /* Le azioni prendono tutta la riga, a meno che accanto ci siano gli incantesimi. */
+  .zone-play .cell:has(.actions-panel) {
+    grid-column: span 12;
+  }
+  .zone-play .cell:has(.actions-panel):has(+ .cell .spells-panel) {
+    grid-column: span 4;
+    /* accanto agli incantesimi, che sono alti, resta della sua altezza invece di allungarsi vuoto */
+    align-self: start;
+  }
+  .zone-play .cell:has(.spells-panel) {
+    grid-column: span 8;
+  }
+  /* Da sole, le azioni si dispongono su più colonne invece di allungarsi. */
+  .zone-play .cell:has(.actions-panel):not(:has(+ .cell .spells-panel)) .action-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 0 1.5rem;
+  }
+  /* Abilità su due colonne, caratteristiche tre per riga */
+  .skills-panel .check-list {
+    columns: 2;
+    column-gap: 1.5rem;
+  }
+  .skills-panel .check-list li {
+    break-inside: avoid;
+  }
+  .abilities-panel .ability-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  /* Con il mouse le righe possono essere più basse che al tocco. */
+  .sheet .panel {
+    padding: 0.75rem 0.9rem;
+  }
+  .sheet .check-row {
+    min-height: 32px;
+    padding-block: 0.2rem;
+  }
+  .sheet .chip {
+    min-height: 30px;
+  }
+  .sheet .action-list li,
+  .sheet .feature-list details {
+    padding-block: 0.35rem;
   }
 }
 
@@ -1265,4 +1331,129 @@ body:has(.sheet.is-raging) {
 .tag-btn {
   background: transparent;
   cursor: pointer;
+}
+
+/* Iniziativa */
+.initiative {
+  margin-bottom: var(--gap);
+}
+.init-list {
+  list-style: none;
+  margin: 0.75rem 0;
+  padding: 0;
+}
+.init-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.9rem;
+  padding: 0.45rem 0.6rem;
+  border-bottom: 1px solid var(--line);
+  border-left: 3px solid transparent;
+}
+.init-list li.is-current {
+  border-left-color: var(--copper);
+  background: color-mix(in srgb, var(--copper) 14%, transparent);
+}
+.init-list li.is-down .init-name {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+.init-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.init-input input,
+.short-input {
+  width: 4.5rem;
+  min-height: 38px;
+  text-align: center;
+}
+.init-input .btn {
+  min-height: 38px;
+}
+.init-value {
+  min-width: 2.5rem;
+  text-align: center;
+  font-size: var(--step-1);
+  font-variant-numeric: tabular-nums;
+}
+.init-name {
+  flex: 1 1 8rem;
+  font-weight: 700;
+}
+.init-monster {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+.init-monster .btn {
+  min-height: 38px;
+}
+.add-monster {
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--line-strong);
+}
+.monster-matches {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+.turn-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-bottom: var(--gap);
+}
+.turn-banner p {
+  margin: 0;
+}
+.turn-banner.is-mine {
+  border-color: var(--copper);
+  background: color-mix(in srgb, var(--copper) 16%, var(--panel));
+}
+
+/* Campagna accanto alla scheda */
+.campaign-side {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 6;
+  width: min(380px, 100vw);
+  padding: 1rem;
+  overflow-y: auto;
+  background: var(--bg);
+  border-left: 1px solid var(--line-strong);
+  box-shadow: -12px 0 30px rgba(0, 0, 0, 0.25);
+}
+.campaign-side h2 {
+  margin: 0;
+}
+.campaign-side > header {
+  margin-bottom: var(--gap);
+}
+.campaign-side .party {
+  grid-template-columns: 1fr;
+}
+.party-card.is-open {
+  border-color: var(--copper);
+}
+/* Dove c'è spazio la scheda si stringe e il pannello le sta accanto; sugli schermi stretti le passa sopra. */
+@media (min-width: 1100px) {
+  /* Lo spazio del pannello si toglie a tutta la pagina: scheda e barra in alto restano centrate in ciò che rimane. */
+  body:has(.sheet.has-side) {
+    padding-right: 380px;
+  }
+  /* Sugli schermi grandi la scheda si allarga per usare lo spazio invece di lasciare due fasce vuote. */
+  .sheet.has-side {
+    max-width: 1500px;
+  }
+  .campaign-side {
+    box-shadow: none;
+  }
 }

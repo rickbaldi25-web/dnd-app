@@ -17,6 +17,31 @@ export interface Campaign {
   automationLock?: AutomationLevel;
 }
 
+/** Un mostro in combattimento, per come lo vedono tutti: nome e iniziativa, niente statistiche. */
+export interface EncounterMonster {
+  id: string;
+  name: string;
+  initiative: number | null;
+}
+
+/** Il combattimento in corso, visibile a tutta la campagna. L'iniziativa dei PG sta sui personaggi. */
+export interface Encounter {
+  active: boolean;
+  round: number;
+  /** Di chi è il turno: id di un personaggio o di un mostro. */
+  currentId?: string;
+  monsters: EncounterMonster[];
+}
+
+/** Ciò che dei mostri vede solo il Master. */
+export interface MonsterSecret {
+  hp: number;
+  hpMax: number;
+  ac: number;
+  /** Bonus all'iniziativa, per il tasto "Tira". */
+  initiativeBonus: number;
+}
+
 /** Ultimo segnale di presenza di un utente nella campagna. */
 export interface Presence {
   uid: string;
@@ -66,6 +91,12 @@ export interface Repository {
   setAutomationLock(id: string, level: AutomationLevel | null): Promise<void>;
   /** Il giocatore si toglie dall'elenco. I suoi personaggi vanno scollegati a parte. */
   leaveCampaign(id: string, uid: string): Promise<void>;
+  watchEncounter(campaignId: string, cb: (e: Encounter | null) => void): Unsubscribe;
+  /** Solo il Master. */
+  saveEncounter(campaignId: string, encounter: Encounter): Promise<void>;
+  /** Solo il Master: gli altri non ricevono nulla. Chiave = id del mostro. */
+  watchMonsterSecrets(campaignId: string, cb: (secrets: Record<string, MonsterSecret>) => void): Unsubscribe;
+  saveMonsterSecrets(campaignId: string, secrets: Record<string, MonsterSecret>): Promise<void>;
   /** "Sono qui": da richiamare a intervalli finché la pagina è aperta. */
   touchPresence(campaignId: string, user: { uid: string; name: string }): Promise<void>;
   watchPresence(campaignId: string, cb: (list: Presence[]) => void): Unsubscribe;

@@ -2,11 +2,14 @@ import type { WidgetRef } from "@dnd/engine";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { AutomationSwitch } from "../components/AutomationSwitch";
+import { CampaignSide, useCampaignSide } from "../components/CampaignSide";
 import { ChoicesPanel } from "../components/ChoicesPanel";
+import { TurnBanner } from "../components/Initiative";
 import { LevelUpDialog } from "../components/LevelUpDialog";
 import { ProposalDialog } from "../components/ProposalDialog";
 import { registry } from "../content";
 import { repo } from "../data";
+import { useAuth } from "../firebase/auth";
 import { useCharacter, useUserAutomation, type CharacterController } from "../state/useCharacter";
 import { EditModeContext } from "../widgets/core";
 import { EXTRA_WIDGETS, WIDGETS, type Zone } from "../widgets/registry";
@@ -78,16 +81,18 @@ export function Sheet() {
   const [edit, setEdit] = useState(false);
   const [lvlOpen, setLvlOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [sideOpen, setSideOpen] = useCampaignSide();
+  const { user } = useAuth();
 
-  // Lo sfondo reagisce alla vita: da metà PF in giù le luci sfocate crescono (theme.css).
+  // La scheda reagisce alla vita: da metà PF in giù le luci dello sfondo crescono (theme.css).
   const hpCur = c?.ch.state.hpCurrent;
   const hpMax = c?.sheet.hpMax.value;
   useEffect(() => {
     if (hpCur === undefined || !hpMax) return;
     const low = Math.max(0, Math.min(1, 1 - hpCur / (hpMax / 2)));
-    document.body.style.setProperty("--hp-low", low.toFixed(2));
+    document.documentElement.style.setProperty("--hp-low", low.toFixed(2));
     return () => {
-      document.body.style.removeProperty("--hp-low");
+      document.documentElement.style.removeProperty("--hp-low");
     };
   }, [hpCur, hpMax]);
 
@@ -107,7 +112,7 @@ export function Sheet() {
 
   return (
     <EditModeContext.Provider value={edit}>
-      <main className={`page sheet ${raging ? "is-raging" : ""}`}>
+      <main className={`page sheet ${raging ? "is-raging" : ""} ${ch.campaignId && sideOpen ? "has-side" : ""}`}>
         <header className="sheet-head">
           <Link to="/" className="back" aria-label="Torna ai personaggi">
             ‹
@@ -119,6 +124,11 @@ export function Sheet() {
             </p>
           </div>
           <div className="sheet-tools">
+            {ch.campaignId && (
+              <button className={`btn ${sideOpen ? "" : "btn-primary"}`} aria-expanded={sideOpen} onClick={() => setSideOpen(!sideOpen)}>
+                {sideOpen ? "Nascondi campagna" : "Campagna"}
+              </button>
+            )}
             <button className="btn" onClick={() => setLvlOpen(true)} disabled={sheet.level >= 20}>
               Sali di livello
             </button>
@@ -165,6 +175,7 @@ export function Sheet() {
 
         {edit && <p className="edit-banner">Modalità correzione: tocca un numero per forzarlo. Lascialo uguale al calcolato per annullare.</p>}
 
+        {ch.campaignId && !sideOpen && <TurnBanner ch={ch} onInitiative={(v) => c.update((x) => ({ ...x, state: { ...x.state, initiative: v } }))} />}
         <ChoicesPanel c={c} />
         {warnings.length > 0 && (
           <ul className="problems">
@@ -178,6 +189,8 @@ export function Sheet() {
 
         <Zones c={c} />
         <ZoneTabs />
+
+        {ch.campaignId && sideOpen && user && <CampaignSide campaignId={ch.campaignId} currentId={ch.id} uid={user.uid} onClose={() => setSideOpen(false)} />}
 
         <ProposalDialog c={c} />
         <LevelUpDialog c={c} open={lvlOpen} onClose={() => setLvlOpen(false)} />

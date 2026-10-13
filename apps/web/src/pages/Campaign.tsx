@@ -1,6 +1,7 @@
 import { applyDamage, applyHealing, applyProposal, computeSheet, longRest, shortRest, type AutomationLevel, type CharacterData, type ComputedSheet } from "@dnd/engine";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
+import { InitiativePanel } from "../components/Initiative";
 import { CONDITIONS, registry } from "../content";
 import { repo, type Campaign as CampaignData } from "../data";
 import { useAuth } from "../firebase/auth";
@@ -18,7 +19,7 @@ function sheetOf(ch: CharacterData): ComputedSheet | null {
 }
 
 /** Un personaggio del gruppo: ciò che serve al tavolo, più i comandi rapidi del Master. */
-function PartyCard({ ch, canEdit, mine, online }: { ch: CharacterData; canEdit: boolean; mine: boolean; online: boolean }) {
+export function PartyCard({ ch, canEdit, mine, online, current = false }: { ch: CharacterData; canEdit: boolean; mine: boolean; online: boolean; current?: boolean }) {
   const { push } = useLog();
   const [amount, setAmount] = useState("");
   const sheet = useMemo(() => sheetOf(ch), [ch]);
@@ -47,7 +48,7 @@ function PartyCard({ ch, canEdit, mine, online }: { ch: CharacterData; canEdit: 
     setAmount("");
   };
   return (
-    <li className={`panel party-card ${s.hpCurrent === 0 ? "is-down" : ""}`}>
+    <li className={`panel party-card ${s.hpCurrent === 0 ? "is-down" : ""} ${current ? "is-open" : ""}`}>
       <header className="panel-head">
         <h2>
           <span className={`presence-dot ${online ? "is-online" : ""}`} role="img" aria-label={online ? "Connesso" : "Non connesso"} title={online ? "Connesso" : "Non connesso"} />
@@ -110,7 +111,7 @@ function PartyCard({ ch, canEdit, mine, online }: { ch: CharacterData; canEdit: 
           </select>
         </div>
       )}
-      {(canEdit || mine) && (
+      {(canEdit || mine) && !current && (
         <Link className="link-btn" to={`/c/${ch.id}`}>
           Apri la scheda
         </Link>
@@ -187,6 +188,13 @@ export function Campaign() {
           </p>
         </div>
         <div className="sheet-tools">
+          {own
+            .filter((ch) => ch.campaignId === campaign.id)
+            .map((ch) => (
+              <Link key={ch.id} className="btn btn-primary" to={`/c/${ch.id}`}>
+                Scheda di {ch.name}
+              </Link>
+            ))}
           <span className="campaign-code" title="Codice da dare ai giocatori">
             {campaign.id}
           </span>
@@ -232,6 +240,8 @@ export function Campaign() {
           </p>
         </section>
       )}
+      <InitiativePanel campaignId={campaign.id} party={party} isDm={isDm} uid={user.uid} />
+
       <ul className="party">
         {party.map((ch) => (
           <PartyCard key={ch.id} ch={ch} canEdit={isDm} mine={ch.ownerUid === user.uid} online={online.some((p) => p.uid === ch.ownerUid)} />
