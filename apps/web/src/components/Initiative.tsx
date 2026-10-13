@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { CONDITIONS, loadMonsters, registry } from "../content";
 import { repo, type Encounter, type EncounterMonster, type MonsterSecret } from "../data";
 import { useLog } from "../state/log";
+import { EndCombat } from "./EndCombat";
 import { MonsterStatBlock } from "./MonsterStatBlock";
 
 /** Una riga dell'ordine di iniziativa: un personaggio o un mostro. */
@@ -92,7 +93,7 @@ export function withMonsters(encounter: Encounter, secrets: Record<string, Monst
     for (let i = 0; i < count; i++) {
       const id = `m-${stamp}-${monsters.length}`;
       monsters.push({ id, name: count > 1 || taken > 0 ? `${m.name} ${taken + i + 1}` : m.name, initiative: null });
-      nextSecrets[id] = { hp: m.hp, hpMax: m.hp, ac: m.ac, initiativeBonus: m.bonus, ...(m.monsterId ? { monsterId: m.monsterId } : {}) };
+      nextSecrets[id] = { hp: m.hp, hpMax: m.hp, ac: m.ac, initiativeBonus: m.bonus, ...(m.monsterId ? { monsterId: m.monsterId } : {}), ...(m.cr ? { cr: m.cr } : {}) };
     }
   }
   return { encounter: { ...encounter, monsters }, secrets: nextSecrets };
@@ -156,7 +157,7 @@ export function AddMonster({ onAdd, withCr = false }: { onAdd: (m: NewMonster, c
           onClick={() => {
             // La scheda resta collegata solo se il nome è ancora quello scelto dalla raccolta.
             const monsterId = picked && picked.name === name.trim() ? picked.id : undefined;
-            onAdd({ name: name.trim(), hp: Math.max(1, Number(hp) || 1), ac: Number(ac) || 10, bonus: Number(bonus) || 0, ...(monsterId ? { monsterId } : {}), ...(withCr && cr ? { cr } : {}) }, Math.max(1, Math.min(20, Number(count) || 1)));
+            onAdd({ name: name.trim(), hp: Math.max(1, Number(hp) || 1), ac: Number(ac) || 10, bonus: Number(bonus) || 0, ...(monsterId ? { monsterId } : {}), ...(cr && (withCr || monsterId) ? { cr } : {}) }, Math.max(1, Math.min(20, Number(count) || 1)));
             setPicked(undefined);
             setName("");
             setHp("");
@@ -196,6 +197,7 @@ export function InitiativePanel({ campaignId, party, isDm, uid }: { campaignId: 
   const [rounds, setRounds] = useState<Record<string, string>>({});
   const [openSheet, setOpenSheet] = useState<string | null>(null);
   const [openRow, setOpenRow] = useState<string | null>(null);
+  const [ending, setEnding] = useState(false);
   const [library, setLibrary] = useState<MonsterDef[] | null>(null);
   useEffect(() => {
     if (openSheet && !library) loadMonsters().then(setLibrary).catch(() => setLibrary([]));
@@ -260,7 +262,7 @@ export function InitiativePanel({ campaignId, party, isDm, uid }: { campaignId: 
     save({ ...encounter, monsters, currentId: ready[(i + 1) % ready.length]!.id, round: encounter.round + (wrapped ? 1 : 0) });
   };
   const end = () => {
-    if (!window.confirm("Terminare il combattimento? Iniziative e mostri vengono azzerati.")) return;
+    setEnding(false);
     save({ active: false, round: 1, monsters: [] });
     saveSecrets({});
     for (const ch of party) if (ch.state.initiative != null) setPcInitiative(ch, null);
@@ -301,12 +303,13 @@ export function InitiativePanel({ campaignId, party, isDm, uid }: { campaignId: 
             <button className="btn btn-primary" disabled={!ready.length} onClick={next}>
               {current ? "Prossimo turno" : "Primo turno"}
             </button>
-            <button className="btn btn-quiet" onClick={end}>
+            <button className="btn btn-quiet" aria-expanded={ending} onClick={() => setEnding(!ending)}>
               Termina
             </button>
           </span>
         )}
       </div>
+      {isDm && ending && <EndCombat campaignId={campaignId} monsters={encounter.monsters} secrets={secrets} partySize={party.length} onDone={end} onCancel={() => setEnding(false)} onError={failed} />}
       <ol className="init-list">
         {order.map((c) => {
           const mine = c.character?.ownerUid === uid;

@@ -3,7 +3,7 @@ import { repo, type SessionNote } from "../data";
 import { useLog } from "../state/log";
 import { isNewRecap, markSeen, recapStamp, useSeen } from "../state/news";
 
-const today = () => {
+export const today = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
@@ -11,6 +11,29 @@ const showDate = (iso: string) => {
   const [y, m, d] = iso.split("-").map(Number);
   return y && m && d ? new Date(y, m - 1, d).toLocaleDateString("it-IT", { day: "numeric", month: "long", year: "numeric" }) : iso;
 };
+
+const pe = (n: number) => n.toLocaleString("it-IT");
+const sessionXp = (s: SessionNote) => (s.awards ?? []).reduce((sum, a) => sum + a.xp, 0);
+
+/** PE assegnati nella sessione. Il Master può togliere una voce messa per errore. */
+function Awards({ session, onRemove }: { session: SessionNote; onRemove?: (i: number) => void }) {
+  if (!session.awards?.length) return null;
+  return (
+    <ul className="award-list">
+      {session.awards.map((a, i) => (
+        <li key={`${a.at}-${i}`}>
+          <span>{a.label}</span>
+          <strong>{pe(a.xp)} PE</strong>
+          {onRemove && (
+            <button className="icon-btn" aria-label={`Togli ${a.label}`} onClick={() => onRemove(i)}>
+              ×
+            </button>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 /** Campi di una sessione per il Master. Si salva uscendo da un campo o con il tasto. */
 function SessionEditor({ session, secret, onSave, onDelete }: { session: SessionNote; secret: string; onSave: (s: SessionNote, secret: string) => void; onDelete: () => void }) {
@@ -63,7 +86,8 @@ export function SessionNotes({ campaignId, isDm }: { campaignId: string; isDm: b
   const failed = (e: unknown) => push({ title: "Salvataggio non riuscito", lines: [String(e instanceof Error ? e.message : e)], tone: "bad" });
   const sorted = [...sessions].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt);
   // Ai giocatori si mostrano solo le sessioni che hanno già un riassunto.
-  const shown = isDm ? sorted : sorted.filter((s) => s.recap.trim());
+  const shown = isDm ? sorted : sorted.filter((s) => s.recap.trim() || s.awards?.length);
+  const totalXp = sessions.reduce((sum, s) => sum + sessionXp(s), 0);
 
   const create = () => {
     const id = `s-${Date.now().toString(36)}`;
@@ -98,6 +122,11 @@ export function SessionNotes({ campaignId, isDm }: { campaignId: string; isDm: b
         )}
       </div>
       {shown.length === 0 && <p className="muted small">{isDm ? "Una voce per serata: il riassunto per il gruppo e i tuoi appunti riservati." : "Qui compaiono i riassunti delle sessioni scritti dal Master."}</p>}
+      {totalXp > 0 && (
+        <p className="small">
+          PE assegnati al gruppo finora: <strong>{pe(totalXp)}</strong>
+        </p>
+      )}
       <ul className="handout-list">
         {shown.map((s) => {
           const open = openId === s.id;
@@ -114,10 +143,12 @@ export function SessionNotes({ campaignId, isDm }: { campaignId: string; isDm: b
                 </button>
                 <span className="muted small">
                   {showDate(s.date)}
+                  {sessionXp(s) > 0 ? ` · ${pe(sessionXp(s))} PE` : ""}
                   {isDm && !s.recap.trim() ? " · senza riassunto" : ""}
                 </span>
               </div>
-              {open && (isDm ? <SessionEditor session={s} secret={secrets[s.id] ?? ""} onSave={save} onDelete={() => remove(s)} /> : <p className="handout-text session-recap">{s.recap}</p>)}
+              {open && (isDm ? <SessionEditor session={s} secret={secrets[s.id] ?? ""} onSave={save} onDelete={() => remove(s)} /> : s.recap.trim() && <p className="handout-text session-recap">{s.recap}</p>)}
+              {open && <Awards session={s} onRemove={isDm ? (i) => repo.saveSession(campaignId, { ...s, awards: (s.awards ?? []).filter((_, j) => j !== i) }).catch(failed) : undefined} />}
             </li>
           );
         })}

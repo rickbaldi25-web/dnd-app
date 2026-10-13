@@ -44,6 +44,8 @@ export interface MonsterSecret {
   initiativeBonus: number;
   /** Id nella raccolta dei mostri, se viene da lì: serve ad aprirne la scheda. */
   monsterId?: string;
+  /** Grado di sfida, per i PE a fine combattimento. */
+  cr?: string;
 }
 
 /** Un gruppo di mostri uguali in un incontro preparato. */
@@ -92,6 +94,8 @@ export interface SessionNote {
   /** Riassunto per i giocatori. */
   recap: string;
   createdAt: number;
+  /** PE assegnati al gruppo in questa sessione, una voce per combattimento o ricompensa. */
+  awards?: { label: string; xp: number; at: number }[];
 }
 
 /** Oggetti e incantesimi propri della campagna, inseriti dal Master. */

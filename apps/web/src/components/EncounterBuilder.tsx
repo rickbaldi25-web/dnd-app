@@ -22,7 +22,7 @@ function startPlan(campaignId: string, encounter: Encounter | null, secrets: Rec
   const next = withMonsters(
     running,
     encounter?.active ? secrets : {},
-    plan.entries.map((e) => ({ monster: { name: e.name, hp: e.hp, ac: e.ac, bonus: e.initiativeBonus, ...(e.monsterId ? { monsterId: e.monsterId } : {}) }, count: e.count })),
+    plan.entries.map((e) => ({ monster: { name: e.name, hp: e.hp, ac: e.ac, bonus: e.initiativeBonus, ...(e.monsterId ? { monsterId: e.monsterId } : {}), ...(e.cr ? { cr: e.cr } : {}) }, count: e.count })),
   );
   return Promise.all([repo.saveEncounter(campaignId, next.encounter), repo.saveMonsterSecrets(campaignId, next.secrets)]);
 }
