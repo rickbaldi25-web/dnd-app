@@ -1,5 +1,5 @@
 import { AUTOMATION_POLICY, DEFAULT_AUTOMATION } from "./automation.js";
-import { withFlat } from "./dice.js";
+import { parseDice, withFlat } from "./dice.js";
 import { featsByTag, must, type Registry } from "./registry.js";
 import { computeSpellcasting } from "./spells.js";
 import {
@@ -24,7 +24,7 @@ import {
   type WeaponDef,
   type WidgetRef,
 } from "./types.js";
-import { abilityMod, evalCondition, evalValue, proficiencyBonusFor, type EvalContext } from "./values.js";
+import { abilityMod, evalCondition, evalValue, proficiencyBonusFor, resolveDice, type EvalContext } from "./values.js";
 import { validateCharacter } from "./validate.js";
 
 export interface ComputeOptions {
@@ -68,10 +68,21 @@ export function classLevelsOf(ch: CharacterData): Record<string, number> {
 const dieSize = (d: Die) => parseInt(d.slice(1), 10);
 export const averageHitDie = (d: Die) => dieSize(d) / 2 + 1;
 
+/** Una scelta raccolta, con il privilegio (e la classe) da cui viene. */
+export type CollectedChoice = ChoiceDef & { source: string; classId?: string; featureId?: string; featureName?: string };
+
+/**
+ * Un talento ripetibile preso da una certa scelta: id e scelte interne prendono
+ * il nome di quella scelta, così due Aumenti di Caratteristica non si pestano i piedi.
+ */
+function scopeFeature(f: Feature, scope: string): Feature {
+  return { ...f, id: `${f.id}@${scope}`, choices: f.choices?.map((c) => ({ ...c, id: `${scope}/${c.id}` })) };
+}
+
 /** Raccoglie privilegi attivi (specie, classi, sottoclassi, talenti, homebrew) e le scelte implicite. */
 export function collectFeatures(ch: CharacterData, reg: Registry, classLevels: Record<string, number>) {
   const active: ActiveFeature[] = [];
-  const choices: (ChoiceDef & { source: string })[] = [];
+  const choices: CollectedChoice[] = [];
   const firstClassId = ch.levels[0]?.classId;
 
   const species = must(reg.species, ch.speciesId, "Specie");
@@ -120,15 +131,20 @@ export function collectFeatures(ch: CharacterData, reg: Registry, classLevels: R
   // Le scelte dei privilegi possono portare talenti, che a loro volta hanno scelte.
   const seenFeats = new Set<string>(bgFeat ? [bgFeat.id] : []);
   for (let i = 0; i < active.length; i++) {
-    const { feature, source } = active[i]!;
+    const { feature, source, classId } = active[i]!;
     for (const c of feature.choices ?? []) {
-      choices.push({ ...c, source });
+      choices.push({ ...c, source, classId, featureId: feature.id, featureName: feature.name });
       if (c.kind !== "feat") continue;
       for (const featId of ch.choices[c.id] ?? []) {
         const feat = reg.feats.get(featId);
-        if (!feat || seenFeats.has(feat.id)) continue;
+        if (!feat) continue;
+        if (feat.repeatable) {
+          active.push({ feature: scopeFeature(feat.feature, c.id), source: `${feature.name}: ${feat.name}`, classId });
+          continue;
+        }
+        if (seenFeats.has(feat.id)) continue;
         seenFeats.add(feat.id);
-        active.push({ feature: feat.feature, source: `${feature.name}: ${feat.name}`, classId: active[i]!.classId });
+        active.push({ feature: feat.feature, source: `${feature.name}: ${feat.name}`, classId });
       }
     }
   }
@@ -190,6 +206,8 @@ export function computeSheet(ch: CharacterData, reg: Registry, opts: ComputeOpti
   /* --- contesto preliminare per le caratteristiche --- */
   const baseScores = {} as Record<Ability, number>;
   for (const a of ABILITIES) baseScores[a] = (ch.abilityScores[a] ?? 10) + (ch.backgroundBoosts[a] ?? 0);
+  const featureIds = new Set(active.map((x) => x.feature.id));
+  const picks = (c: ChoiceDef) => ch.choices[c.id] ?? [];
   const mkCtx = (scores: Record<Ability, number>): EvalContext => {
     const mods = {} as Record<Ability, number>;
     for (const a of ABILITIES) mods[a] = abilityMod(scores[a]);
@@ -203,6 +221,7 @@ export function computeSheet(ch: CharacterData, reg: Registry, opts: ComputeOpti
       conditions: ch.state.conditions,
       armor: (armor?.category ?? "none") as ArmorCategory | "none",
       shield: !!shield,
+      features: featureIds,
     };
   };
   const allEffects: { effect: Effect; source: string }[] = active.flatMap(({ feature, source }) =>
@@ -211,19 +230,33 @@ export function computeSheet(ch: CharacterData, reg: Registry, opts: ComputeOpti
 
   /* --- caratteristiche --- */
   const preCtx = mkCtx(baseScores);
+  const boostChoices = choices.filter((c) => c.kind === "abilityBoost");
   const abilities = {} as ComputedSheet["abilities"];
   const finalScores = {} as Record<Ability, number>;
   for (const a of ABILITIES) {
     const parts: Part[] = [{ label: "Base", value: ch.abilityScores[a] ?? 10 }];
     if (ch.backgroundBoosts[a]) parts.push({ label: bg.name, value: ch.backgroundBoosts[a]! });
+    let cap = 20;
+    for (const c of boostChoices) {
+      const n = picks(c).filter((x) => x === a).length;
+      if (!n) continue;
+      parts.push({ label: c.label, value: n });
+      if (c.max) cap = Math.max(cap, c.max);
+    }
+    // Gli aumenti a scelta si fermano al tetto prima che arrivino i bonus dei privilegi (che possono alzarlo).
+    const chosen = sumParts(parts);
+    if (chosen > cap) parts.push({ label: `Massimo ${cap}`, value: cap - chosen });
     for (const { effect, source } of allEffects) {
-      if (effect.type === "bonus" && effect.target === `ability.${a}` && evalCondition(effect.when, preCtx)) {
+      if (!evalCondition(effect.when, preCtx)) continue;
+      if (effect.type === "bonus" && effect.target === `ability.${a}`) {
         parts.push({ label: effect.label ?? source, value: evalValue(effect.value, preCtx) });
+      } else if (effect.type === "abilityMax" && effect.ability === a) {
+        cap = Math.max(cap, effect.value);
       }
     }
     let s = stat(`ability.${a}`, parts);
-    if (!s.overridden && s.value > 20) {
-      s = { ...s, value: 20, parts: [...parts, { label: "Massimo 20", value: 20 - s.computed }] };
+    if (!s.overridden && s.value > cap) {
+      s = { ...s, value: cap, parts: [...parts, { label: `Massimo ${cap}`, value: cap - s.computed }] };
     }
     finalScores[a] = s.value;
     abilities[a] = { score: s, mod: abilityMod(s.value) };
@@ -268,6 +301,15 @@ export function computeSheet(ch: CharacterData, reg: Registry, opts: ComputeOpti
   const saveProf = new Set<string>([...(firstClass?.proficiencies.saves ?? []), ...grants("save")]);
   const skillProf = new Set<string>([...bg.skills, ...chosenSkills, ...grants("skill")]);
   const expertise = new Set<string>(grants("expertise"));
+  for (const c of choices) {
+    if (c.kind !== "expertise") continue;
+    for (const id of picks(c)) {
+      if (!skillProf.has(id) && policy.validation !== "off") {
+        issues.push({ severity: "error", code: "expertise.unproficient", path: `choices.${c.id}`, message: `${c.label}: serve la competenza in ${reg.skills.get(id)?.name ?? id}.` });
+      }
+      expertise.add(id);
+    }
+  }
 
   /* --- tiri salvezza --- */
   const saves = {} as ComputedSheet["saves"];
@@ -290,7 +332,7 @@ export function computeSheet(ch: CharacterData, reg: Registry, opts: ComputeOpti
     const isExpert = expertise.has(sk.id);
     const parts: Part[] = [{ label: "Caratteristica", value: mods[ability] }];
     if (proficient) parts.push({ label: isExpert ? "Competenza (maestria)" : "Competenza", value: proficiencyBonus * (isExpert ? 2 : 1) });
-    parts.push(...bonusParts(`skill.${sk.id}`, "skill.all", `check.${ability}`));
+    parts.push(...bonusParts(`skill.${sk.id}`, "skill.all", `check.${ability}`, ...(proficient ? [] : ["skill.unproficient"])));
     if (d20Penalty) parts.push({ label: "Indebolimento", value: -d20Penalty });
     skills[sk.id] = {
       name: sk.name,
@@ -377,9 +419,18 @@ export function computeSheet(ch: CharacterData, reg: Registry, opts: ComputeOpti
 
   /* --- attacchi --- */
   const masteries = new Set(choices.filter((c) => c.kind === "weaponMastery").flatMap((c) => ch.choices[c.id] ?? []));
+  const martialDie = Math.max(0, ...live.flatMap(({ effect }) => (effect.type === "martialArts" ? [evalValue(effect.die, ctx)] : [])));
+  const unarmedDie = Math.max(martialDie, ...live.flatMap(({ effect }) => (effect.type === "unarmed" ? [evalValue(effect.die, ctx)] : [])));
+  const extraDamage = (kind: "melee" | "ranged" | "unarmed"): ComputedAttack["extraDamage"] =>
+    live.flatMap(({ effect, source }) =>
+      effect.type === "damageDice" && (effect.on === "all" || effect.on === kind || (effect.on === "weapon" && kind !== "unarmed"))
+        ? [{ label: effect.label ?? source, dice: resolveDice(effect.dice, ctx), damageType: effect.damageType }]
+        : [],
+    );
   const attacks: ComputedAttack[] = weapons.map((w) => {
+    const monkWeapon = martialDie > 0 && w.range === "melee" && (w.category === "simple" || w.properties.includes("light"));
     const ability: Ability =
-      w.range === "ranged" ? "dex" : w.properties.includes("finesse") && mods.dex > mods.str ? "dex" : "str";
+      w.range === "ranged" ? "dex" : (w.properties.includes("finesse") || monkWeapon) && mods.dex > mods.str ? "dex" : "str";
     const proficient = weaponProf.has(w.category) || weaponProf.has(w.id);
     const parts: Part[] = [{ label: "Caratteristica", value: mods[ability] }];
     if (proficient) parts.push({ label: "Competenza", value: proficiencyBonus });
@@ -387,28 +438,72 @@ export function computeSheet(ch: CharacterData, reg: Registry, opts: ComputeOpti
     if (d20Penalty) parts.push({ label: "Indebolimento", value: -d20Penalty });
     const dmgFlat =
       mods[ability] + sumParts(bonusParts("damage.all", ...(ability === "str" ? ["damage.str"] : [])));
+    let dice = w.damage;
+    if (monkWeapon) {
+      const p = parseDice(w.damage);
+      if (p.dice.length === 1 && p.dice[0]!.count === 1 && p.dice[0]!.sides < martialDie) dice = `1d${martialDie}`;
+    }
     return {
       itemId: w.id,
       name: w.name,
       ability,
       toHit: stat(`attack.${w.id}`, parts),
-      damage: withFlat(w.damage, dmgFlat),
+      damage: withFlat(dice, dmgFlat),
       damageType: w.damageType,
       mastery: w.mastery,
       masteryActive: masteries.has(w.id),
       properties: w.properties,
       critRange,
+      extraDamage: extraDamage(w.range),
     };
   });
+  {
+    // Colpo senz'armi: sempre disponibile, 1 + For di danno se nessun privilegio dà un dado.
+    const ability: Ability = martialDie > 0 && mods.dex > mods.str ? "dex" : "str";
+    const parts: Part[] = [
+      { label: "Caratteristica", value: mods[ability] },
+      { label: "Competenza", value: proficiencyBonus },
+      ...bonusParts("attack.melee", "attack.unarmed", "attack.all"),
+    ];
+    if (d20Penalty) parts.push({ label: "Indebolimento", value: -d20Penalty });
+    const flat = mods[ability] + sumParts(bonusParts("damage.all", "damage.unarmed", ...(ability === "str" ? ["damage.str"] : [])));
+    attacks.push({
+      itemId: "unarmed",
+      name: "Colpo senz'armi",
+      ability,
+      toHit: stat("attack.unarmed", parts),
+      damage: unarmedDie ? withFlat(`1d${unarmedDie}`, flat) : String(Math.max(0, 1 + flat)),
+      damageType: "bludgeoning",
+      masteryActive: false,
+      properties: [],
+      critRange,
+      unarmed: true,
+      extraDamage: extraDamage("unarmed"),
+    });
+  }
+  const attacksPerAction = Math.max(1, ...live.flatMap(({ effect }) => (effect.type === "extraAttack" ? [evalValue(effect.attacks, ctx)] : [])));
+
+  /* --- altre velocità --- */
+  const speeds: Record<string, number> = {};
+  for (const { effect } of live) {
+    if (effect.type !== "speed") continue;
+    const v = effect.value === "walk" ? speed.value : evalValue(effect.value, ctx);
+    speeds[effect.mode] = Math.max(speeds[effect.mode] ?? 0, v);
+  }
 
   /* --- risorse, azioni, toggle --- */
   const resources: ComputedResource[] = [];
   const actions: ComputedSheet["actions"] = [];
   const toggles: ComputedSheet["toggles"] = [];
   const features: ComputedSheet["features"] = [];
+  const dice: ComputedSheet["dice"] = [];
   const widgets: WidgetRef[] = [...CORE_WIDGETS];
   for (const { feature, source } of active) {
     features.push({ id: feature.id, name: feature.name, source, description: feature.description });
+    for (const d of feature.dice ?? []) {
+      if (!evalCondition(d.when, ctx)) continue;
+      dice.push({ id: d.id, name: d.name, expr: resolveDice(d.dice, ctx), source, damageType: d.damageType, note: d.note });
+    }
     for (const r of feature.resources ?? []) {
       const max = Math.max(0, evalValue(r.max, ctx));
       const spent = Math.min(max, ch.state.resourcesSpent[r.id] ?? 0);
@@ -423,7 +518,12 @@ export function computeSheet(ch: CharacterData, reg: Registry, opts: ComputeOpti
     for (const a of feature.actions ?? []) {
       const res = a.cost ? resources.find((r) => r.id === a.cost!.resource) : undefined;
       const affordable = !a.cost || (res !== undefined && res.remaining >= a.cost.amount);
-      actions.push({ ...(a as ActionDef), source, available: evalCondition(a.when, ctx) && affordable });
+      actions.push({
+        ...a,
+        roll: a.roll ? { dice: resolveDice(a.roll.dice, ctx), plus: a.roll.plus } : undefined,
+        source,
+        available: evalCondition(a.when, ctx) && affordable,
+      });
     }
   }
 
@@ -436,9 +536,26 @@ export function computeSheet(ch: CharacterData, reg: Registry, opts: ComputeOpti
     proficiencyBonus,
     mods,
     d20Penalty,
-    granted: active.flatMap(({ feature, classId }) =>
-      (feature.spells ?? []).map((spell) => ({ spell, classId, featureId: feature.id, featureName: feature.name })),
-    ),
+    granted: [
+      ...active.flatMap(({ feature, classId }) =>
+        (feature.spells ?? []).map((spell) => ({ spell, classId, featureId: feature.id, featureName: feature.name })),
+      ),
+      // Gli incantesimi scelti con una scelta "spell" diventano sempre preparati.
+      ...choices.flatMap((c) =>
+        c.kind === "spell"
+          ? picks(c).map((spellId) => ({
+              spell: {
+                spellId,
+                ability: c.spell?.ability ?? (c.spell?.abilityFrom ? (ch.choices[c.spell.abilityFrom]?.[0] as Ability | undefined) : undefined),
+                resource: c.spell?.resource,
+              },
+              classId: c.classId,
+              featureId: c.featureId ?? c.id,
+              featureName: c.featureName ?? c.label,
+            }))
+          : [],
+      ),
+    ],
     bonusParts,
     stat,
     validate: policy.validation !== "off",
@@ -456,7 +573,7 @@ export function computeSheet(ch: CharacterData, reg: Registry, opts: ComputeOpti
     for (const p of pendingChoices) {
       issues.push({ severity: "warning", code: "choice.pending", path: `choices.${p.id}`, message: `Scelta da completare: ${p.label} (${p.made}/${p.required}).` });
     }
-    issues.push(...validateCharacter(ch, reg, { choices, featsByTag: (t) => featsByTag(reg, t).map((f) => f.id) }));
+    issues.push(...validateCharacter(ch, reg, { choices, featsByTag: (t) => featsByTag(reg, t).map((f) => f.id), featureIds }));
   }
 
   return {
@@ -472,9 +589,12 @@ export function computeSheet(ch: CharacterData, reg: Registry, opts: ComputeOpti
     hpMax,
     initiative,
     speed,
+    speeds,
     hitDice,
     critRange,
+    attacksPerAction,
     attacks,
+    dice,
     resources,
     actions,
     toggles,
@@ -483,6 +603,7 @@ export function computeSheet(ch: CharacterData, reg: Registry, opts: ComputeOpti
     widgets,
     resistances: unique(grants("resistance")),
     immunities: unique(grants("immunity")),
+    conditionImmunities: unique(grants("conditionImmunity")),
     senses: live.flatMap(({ effect }) => (effect.type === "sense" ? [{ sense: effect.sense, range: effect.range }] : [])),
     advantages,
     proficiencies: {

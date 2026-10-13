@@ -67,6 +67,13 @@ export function formatDice(p: ParsedDice): string {
   return out;
 }
 
+/** Colpo critico: si tirano due volte i dadi, i bonus fissi restano uno. "1d8+3" -> "2d8+3". */
+export function critDice(expr: string): string {
+  const p = parseDice(expr);
+  for (const d of p.dice) d.count *= 2;
+  return formatDice(p);
+}
+
 export interface RollResult {
   expr: string;
   rolls: { sides: number; value: number; sign: 1 | -1 }[];

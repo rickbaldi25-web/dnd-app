@@ -94,11 +94,22 @@ export function setTempHp(ch: CharacterData, amount: number): Proposal {
 /* Azioni di classe (Ira, Secondo Fiato, Azione Impetuosa...)          */
 /* ------------------------------------------------------------------ */
 
+/** Scelte fatte dal giocatore al momento di usare un'azione. */
+export interface ActionParams {
+  /** Quantità da spendere per i costi variabili (es. PF di Imposizione delle Mani). */
+  amount?: number;
+  /** Slot da recuperare: livello -> quanti (Recupero Arcano). */
+  slots?: Record<string, number>;
+  /** Livello dello slot da convertire o da creare (Fonte di Magia). */
+  slotLevel?: number;
+}
+
 export function useAction(
   ch: CharacterData,
   reg: Registry,
   actionId: string,
   rng: Rng = defaultRng,
+  params: ActionParams = {},
 ): Proposal {
   const sheet = computeSheet(ch, reg);
   const policy = AUTOMATION_POLICY[sheet.automation];
@@ -109,11 +120,17 @@ export function useAction(
   const lines: string[] = [];
   const rolls: Proposal["rolls"] = [];
   let blocked: string | undefined;
+  const fail = (msg: string) => {
+    if (policy.enforceResources) blocked ??= msg;
+    else lines.push(`Attenzione — ${msg}`);
+  };
+  const amount = action.cost?.variable ? Math.max(1, Math.floor(params.amount ?? 1)) : (action.cost?.amount ?? 0);
 
   if (!action.available) {
-    const msg = action.cost ? `${action.name}: risorse esaurite o condizioni non soddisfatte.` : `${action.name}: condizioni non soddisfatte.`;
-    if (policy.enforceResources) blocked = msg;
-    else lines.push(`Attenzione — ${msg}`);
+    fail(action.cost ? `${action.name}: risorse esaurite o condizioni non soddisfatte.` : `${action.name}: condizioni non soddisfatte.`);
+  } else if (action.cost?.variable) {
+    const r = sheet.resources.find((x) => x.id === action.cost!.resource);
+    if ((r?.remaining ?? 0) < amount) fail(`${r?.name ?? action.cost.resource}: ne restano ${r?.remaining ?? 0}, ne servono ${amount}.`);
   }
 
   if (!policy.computeActions) {
@@ -128,14 +145,15 @@ export function useAction(
 
   if (action.cost) {
     const r = sheet.resources.find((x) => x.id === action.cost!.resource);
-    const spent = (s.resourcesSpent[action.cost.resource] ?? 0) + action.cost.amount;
+    const spent = (s.resourcesSpent[action.cost.resource] ?? 0) + amount;
     s.resourcesSpent[action.cost.resource] = r ? Math.min(r.max, spent) : spent;
-    lines.push(`${r?.name ?? action.cost.resource}: −${action.cost.amount} (restano ${Math.max(0, (r?.remaining ?? 0) - action.cost.amount)})`);
+    lines.push(`${r?.name ?? action.cost.resource}: −${amount} (restano ${Math.max(0, (r?.remaining ?? 0) - amount)})`);
   }
 
-  let total = 0;
+  const ctx = evalCtxFromSheet(ch, sheet);
+  // Senza tiro, un costo variabile vale quanto si è speso (es. PF curati con Imposizione delle Mani).
+  let total = action.cost?.variable ? amount : 0;
   if (action.roll) {
-    const ctx = evalCtxFromSheet(ch, sheet);
     const plus = action.roll.plus !== undefined ? evalValue(action.roll.plus, ctx) : 0;
     const r = roll(action.roll.dice, rng);
     total = r.total + plus;
@@ -166,11 +184,89 @@ export function useAction(
       s.toggles[action.outcome.toggle] = false;
       lines.push(`${action.name}: terminato.`);
       break;
+    case "recoverSlots": {
+      const budget = evalValue(action.outcome.budget, ctx);
+      const maxLevel = action.outcome.maxLevel ?? 9;
+      let used = 0;
+      for (const [lv, n] of Object.entries(params.slots ?? {})) {
+        const level = Number(lv);
+        if (!n) continue;
+        const pool = sheet.spellcasting?.slots.find((p) => p.level === level);
+        if (level > maxLevel) fail(`${action.name}: solo slot fino al ${maxLevel}°.`);
+        if ((pool?.spent ?? 0) < n) fail(`Non hai ${n} slot di ${level}° spesi.`);
+        const back = Math.min(n, pool?.spent ?? 0);
+        used += level * n;
+        s.spellSlotsSpent = { ...s.spellSlotsSpent, [lv]: (pool?.spent ?? 0) - back };
+        lines.push(`Slot di ${level}°: +${back}`);
+      }
+      if (used === 0) fail(`Scegli gli slot da recuperare: fino a ${budget} livelli in totale.`);
+      else if (used > budget) fail(`Puoi recuperare slot per ${budget} livelli in totale, ne hai chiesti ${used}.`);
+      break;
+    }
+    case "recoverPact": {
+      const p = sheet.spellcasting?.pact;
+      if (!p || p.spent === 0) {
+        fail("Nessuno slot del Patto da recuperare.");
+        break;
+      }
+      const back = Math.min(p.spent, Math.ceil(p.max * action.outcome.fraction));
+      s.pactSlotsSpent = p.spent - back;
+      lines.push(`Slot del Patto: +${back}`);
+      break;
+    }
+    case "slotToResource": {
+      const level = params.slotLevel;
+      const pool = sheet.spellcasting?.slots.find((p) => p.level === level);
+      const resId = action.outcome.resource;
+      const r = sheet.resources.find((x) => x.id === resId);
+      if (!level || !pool || pool.remaining < 1) {
+        fail("Scegli uno slot disponibile da convertire.");
+        break;
+      }
+      const gain = Math.min(level, r?.spent ?? 0);
+      s.spellSlotsSpent = { ...s.spellSlotsSpent, [String(level)]: pool.spent + 1 };
+      if (r) s.resourcesSpent[r.id] = r.spent - gain;
+      lines.push(`Slot di ${level}°: −1. ${r?.name ?? "Punti"}: +${gain}.`);
+      break;
+    }
+    case "resourceToSlot": {
+      const level = params.slotLevel;
+      const cost = level ? action.outcome.costs[level - 1] : undefined;
+      const resId = action.outcome.resource;
+      const r = sheet.resources.find((x) => x.id === resId);
+      if (!level || cost === undefined) {
+        fail(`Scegli il livello dello slot da creare: dal 1° al ${action.outcome.costs.length}°.`);
+        break;
+      }
+      if (!r || r.remaining < cost) {
+        fail(`Uno slot di ${level}° costa ${cost}: ${r?.name ?? resId} ne ha ${r?.remaining ?? 0}.`);
+        break;
+      }
+      const pool = sheet.spellcasting?.slots.find((p) => p.level === level);
+      s.resourcesSpent[resId] = r.spent + cost;
+      // Lo slot creato rimpiazza uno speso, se c'è; altrimenti è uno slot in più fino al riposo lungo.
+      if (pool && pool.spent > 0) s.spellSlotsSpent = { ...s.spellSlotsSpent, [String(level)]: pool.spent - 1 };
+      else s.spellSlotsBonus = { ...s.spellSlotsBonus, [String(level)]: (s.spellSlotsBonus?.[String(level)] ?? 0) + 1 };
+      lines.push(`${r.name}: −${cost}. Slot di ${level}°: +1.`);
+      break;
+    }
     default:
       if (action.description) lines.push(action.description);
   }
 
   return { title: action.name, lines, rolls, state: s, blocked };
+}
+
+/** Spende (delta negativo) o recupera punti di una risorsa: per i contatori regolati a mano. */
+export function adjustResource(ch: CharacterData, sheet: ComputedSheet, resourceId: string, delta: number): Proposal {
+  const r = sheet.resources.find((x) => x.id === resourceId);
+  if (!r) throw new Error(`Risorsa non disponibile: ${resourceId}`);
+  const s = cloneState(ch.state);
+  const remaining = Math.min(r.max, Math.max(0, r.remaining + Math.trunc(delta)));
+  s.resourcesSpent[resourceId] = r.max - remaining;
+  const policy = AUTOMATION_POLICY[sheet.automation];
+  const blocked = delta < 0 && r.remaining + delta < 0 && policy.enforceResources ? `${r.name}: ne restano ${r.remaining}.` : undefined;
+  return { title: r.name, lines: [`${r.name}: ${r.remaining} → ${remaining}`], rolls: [], state: s, blocked };
 }
 
 /** Attiva/disattiva uno stato senza costi (es. Attacco Irruento). */
@@ -390,6 +486,7 @@ export function longRest(ch: CharacterData, reg: Registry): Proposal {
   }
   s.toggles = {};
   s.spellSlotsSpent = {};
+  s.spellSlotsBonus = {};
   s.pactSlotsSpent = 0;
   s.concentration = null;
   s.deathSaves = { success: 0, failure: 0 };
@@ -422,5 +519,6 @@ function evalCtxFromSheet(ch: CharacterData, sheet: ComputedSheet): EvalContext 
     conditions: ch.state.conditions,
     armor: "none",
     shield: false,
+    features: new Set(sheet.features.map((f) => f.id)),
   };
 }

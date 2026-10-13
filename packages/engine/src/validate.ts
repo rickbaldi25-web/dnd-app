@@ -5,6 +5,8 @@ import { ABILITIES, type CharacterData, type ChoiceDef, type Issue } from "./typ
 export interface ValidateContext {
   choices: (ChoiceDef & { source: string })[];
   featsByTag: (tag: string) => string[];
+  /** Id dei privilegi attivi, per i prerequisiti dei talenti. */
+  featureIds?: ReadonlySet<string>;
 }
 
 /** Controlli di regola sulla costruzione del personaggio (regole 2024). */
@@ -46,13 +48,46 @@ export function validateCharacter(ch: CharacterData, reg: Registry, vctx: Valida
   }
 
   /* scelte */
+  const levels = classLevelsOf(ch);
+  const levelBy = (by: string) => (by === "total" ? ch.levels.length : levels[by] ?? 0);
   const bgSkills = new Set(bg?.skills ?? []);
   for (const c of vctx.choices) {
     const picked = ch.choices[c.id] ?? [];
     if (c.kind === "subclass") continue;
-    const allowed = Array.isArray(c.from) ? c.from : c.from ? vctx.featsByTag(c.from.tag) : undefined;
+    const allowed = Array.isArray(c.from)
+      ? c.from
+      : c.from
+        ? vctx.featsByTag(c.from.tag)
+        : c.kind === "abilityBoost"
+          ? [...ABILITIES]
+          : undefined;
     if (allowed) {
       for (const p of picked) if (!allowed.includes(p)) err("choice.invalid", `"${p}" non è un'opzione valida per ${c.label}.`, `choices.${c.id}`);
+    }
+    if (c.kind === "feat") {
+      for (const p of picked) {
+        const pre = reg.feats.get(p)?.prerequisites;
+        const name = reg.feats.get(p)?.name ?? p;
+        if (pre?.minLevel && levelBy(pre.minLevel.by) < pre.minLevel.level) {
+          err("feat.prerequisite", `${name} richiede il livello ${pre.minLevel.level}${pre.minLevel.by === "total" ? "" : ` da ${reg.classes.get(pre.minLevel.by)?.name ?? pre.minLevel.by}`}.`, `choices.${c.id}`);
+        }
+        for (const f of pre?.features ?? []) {
+          if (vctx.featureIds && !vctx.featureIds.has(f)) err("feat.prerequisite", `${name}: manca un prerequisito (${f}).`, `choices.${c.id}`);
+        }
+      }
+    }
+    if (c.kind === "spell") {
+      const lists = c.spell?.list === undefined ? undefined : Array.isArray(c.spell.list) ? c.spell.list : [c.spell.list];
+      for (const p of picked) {
+        const sp = reg.spells.get(p);
+        if (!sp) {
+          err("choice.invalid", `"${p}" non è un incantesimo valido per ${c.label}.`, `choices.${c.id}`);
+          continue;
+        }
+        const levelOk = (c.spell?.level === undefined || sp.level === c.spell.level) && (c.spell?.maxLevel === undefined || sp.level <= c.spell.maxLevel);
+        const listOk = !lists || lists.some((l) => sp.lists.includes(l));
+        if (!levelOk || !listOk) err("choice.invalid", `${sp.name} non è tra gli incantesimi ammessi per ${c.label}.`, `choices.${c.id}`);
+      }
     }
     if (c.kind === "weaponMastery") {
       for (const p of picked) {
@@ -60,7 +95,7 @@ export function validateCharacter(ch: CharacterData, reg: Registry, vctx: Valida
         if (!it || it.kind !== "weapon") err("choice.invalid", `"${p}" non è un'arma valida per ${c.label}.`, `choices.${c.id}`);
       }
     }
-    if (new Set(picked).size !== picked.length) err("choice.duplicate", `Opzione ripetuta in ${c.label}.`, `choices.${c.id}`);
+    if (!c.repeat && new Set(picked).size !== picked.length) err("choice.duplicate", `Opzione ripetuta in ${c.label}.`, `choices.${c.id}`);
     if (c.kind === "skill") {
       for (const p of picked) if (bgSkills.has(p)) warn("skill.overlap", `${p} è già data dal background: scegline un'altra.`, `choices.${c.id}`);
     }
@@ -68,7 +103,6 @@ export function validateCharacter(ch: CharacterData, reg: Registry, vctx: Valida
   // Scelte in eccesso: richiede il conteggio valutato, lo fa computeSheet tramite pendingChoices (in difetto).
 
   /* sottoclassi */
-  const levels = classLevelsOf(ch);
   for (const [classId, subId] of Object.entries(ch.subclasses)) {
     const sub = reg.subclasses.get(subId);
     const cls = reg.classes.get(classId);

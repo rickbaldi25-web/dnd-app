@@ -26,6 +26,8 @@ export type Die = "d4" | "d6" | "d8" | "d10" | "d12" | "d20";
  * - { level: "barbarian" }     livello in una classe
  * - { table: { by, values } }  tabella per livello (values[0] = livello 1)
  * - { sum: [...] } / { max: [...] } / { min: [...] }
+ * - { times: [v, 5] }          moltiplicazione, es. 5 × livello da paladino
+ * - { div: [v, 2], round }     divisione, per difetto salvo round: "up"
  */
 export type Value =
   | number
@@ -36,7 +38,17 @@ export type Value =
   | { table: { by: "total" | string; values: number[] } }
   | { sum: Value[] }
   | { max: Value[] }
-  | { min: Value[] };
+  | { min: Value[] }
+  | { times: [Value, number] }
+  | { div: [Value, number]; round?: "up" | "down" };
+
+/** Dadi che crescono con il livello: { count: 3, sides: 6 } = "3d6". count omesso = 1. */
+export interface ScaledDice {
+  count?: Value;
+  sides: Value;
+  plus?: Value;
+}
+export type DiceExpr = string | ScaledDice;
 
 export type ArmorCategory = "light" | "medium" | "heavy";
 
@@ -45,6 +57,8 @@ export type Condition =
   | { armor: "none" | ArmorCategory | "any" } // armatura indossata (non lo scudo)
   | { shield: boolean }
   | { hasCondition: string } // condizione di gioco, es. "incapacitated"
+  | { feature: string } // il personaggio ha il privilegio con questo id
+  | { minLevel: { by: "total" | string; level: number } }
   | { all: Condition[] }
   | { any: Condition[] }
   | { not: Condition };
@@ -63,8 +77,10 @@ export type Condition =
  *  initiative          iniziativa
  *  save.<ab> / save.all
  *  skill.<id> / skill.all
- *  attack.melee / attack.ranged / attack.all
+ *  skill.unproficient  solo le abilità senza competenza (es. Factotum)
+ *  attack.melee / attack.ranged / attack.unarmed / attack.all
  *  damage.str          danni degli attacchi che usano Forza (es. Ira)
+ *  damage.unarmed / damage.all
  *  crit.range          soglia critico (min wins)
  *  spell.dc            CD del tiro salvezza degli incantesimi
  *  spell.attack        tiro per colpire degli incantesimi
@@ -87,7 +103,8 @@ export type Effect =
         | "armor"
         | "weapon"
         | "tool"
-        | "language";
+        | "language"
+        | "conditionImmunity";
       values: string[];
       when?: Condition;
     }
@@ -97,7 +114,22 @@ export type Effect =
   /** Permette di usare un'altra caratteristica per certe abilità (si usa la migliore). */
   | { type: "altAbility"; skills: string[]; ability: Ability; when?: Condition }
   /** Soglia minima del critico (es. 19 per Improved Critical). */
-  | { type: "critRange"; value: number; when?: Condition };
+  | { type: "critRange"; value: number; when?: Condition }
+  /** Attacchi totali con l'azione di Attacco (2 con Attacco Extra). Vale il più alto. */
+  | { type: "extraAttack"; attacks: Value; when?: Condition }
+  /** Dado del colpo senz'armi, in numero di facce. Vale il più alto. */
+  | { type: "unarmed"; die: Value; when?: Condition }
+  /**
+   * Arti Marziali: colpi senz'armi e armi da monaco (semplici da mischia, o da
+   * guerra da mischia Leggere) possono usare la Destrezza e questo dado se è più alto.
+   */
+  | { type: "martialArts"; die: Value; when?: Condition }
+  /** Dadi di danno in più a ogni colpo (es. Colpi Radiosi). Per quelli "una volta per turno" usa Feature.dice. */
+  | { type: "damageDice"; on: "melee" | "ranged" | "weapon" | "unarmed" | "all"; dice: DiceExpr; damageType?: string; when?: Condition; label?: string }
+  /** Velocità diverse dal camminare. "walk" = pari alla velocità di camminata. */
+  | { type: "speed"; mode: "fly" | "swim" | "climb" | "burrow"; value: Value | "walk"; when?: Condition }
+  /** Alza il tetto di un punteggio di caratteristica oltre il 20. */
+  | { type: "abilityMax"; ability: Ability; value: number; when?: Condition };
 
 /* ------------------------------------------------------------------ */
 /* Risorse, azioni, scelte, widget                                     */
@@ -120,30 +152,77 @@ export interface ActionDef {
   id: string;
   name: string;
   timing: ActionTiming;
-  cost?: { resource: string; amount: number };
+  /** variable: la quantità la sceglie il giocatore (es. Imposizione delle Mani). */
+  cost?: { resource: string; amount: number; variable?: boolean };
   /** Tiro da effettuare: "1d10" + plus */
-  roll?: { dice: string; plus?: Value };
+  roll?: { dice: DiceExpr; plus?: Value };
   /** Cosa fa automaticamente (in modalità assistita/completa). */
   outcome?:
     | { kind: "heal" }
     | { kind: "tempHp" }
     | { kind: "toggleOn"; toggle: string }
     | { kind: "toggleOff"; toggle: string }
-    | { kind: "note" };
+    | { kind: "note" }
+    /** Recupera slot a scelta: la somma dei livelli non supera budget (es. Recupero Arcano). */
+    | { kind: "recoverSlots"; budget: Value; maxLevel?: number }
+    /** Recupera una parte degli slot del Patto, per eccesso (es. Astuzia Magica: 0.5). */
+    | { kind: "recoverPact"; fraction: number }
+    /** Trasforma uno slot in punti della risorsa: tanti quanti il livello dello slot. */
+    | { kind: "slotToResource"; resource: string }
+    /** Crea uno slot spendendo punti: costs[0] = costo di uno slot di 1°. */
+    | { kind: "resourceToSlot"; resource: string; costs: number[] };
   /** Condizione per poter usare l'azione */
   when?: Condition;
   description?: string;
 }
 
-export type ChoiceKind = "skill" | "feat" | "weaponMastery" | "subclass" | "tool" | "language" | "custom";
+export type ChoiceKind =
+  | "skill"
+  | "feat"
+  | "weaponMastery"
+  | "subclass"
+  | "tool"
+  | "language"
+  | "custom"
+  | "expertise" // maestria in abilità in cui si ha già competenza
+  | "abilityBoost" // +1 a una caratteristica per ogni scelta
+  | "spell"; // incantesimi che diventano sempre preparati
 
 export interface ChoiceDef {
   id: string;
   kind: ChoiceKind;
   label: string;
   count: Value;
-  /** Opzioni ammesse. Per "feat" può essere un tag: { tag: "fighting-style" } */
+  /**
+   * Opzioni ammesse. Per "feat" può essere un tag: { tag: "fighting-style" }.
+   * Omesso: per "expertise" tutte le abilità con competenza, per "abilityBoost" tutte le caratteristiche.
+   */
   from?: string[] | { tag: string };
+  /** La stessa opzione si può scegliere più volte (es. +2 alla stessa caratteristica). */
+  repeat?: boolean;
+  /** "abilityBoost": tetto del punteggio se diverso da 20 (i Doni Epici arrivano a 30). */
+  max?: number;
+  /** "spell": da dove si sceglie e come si lancia ciò che si è scelto. */
+  spell?: {
+    list?: string | string[];
+    /** Livello esatto (0 = trucchetti). */
+    level?: number;
+    maxLevel?: number;
+    ability?: Ability;
+    /** Id di una scelta "abilityBoost"/"custom" il cui valore è la caratteristica da incantatore. */
+    abilityFrom?: string;
+    resource?: string;
+  };
+}
+
+/** Dadi con un nome che la scheda mostra e fa tirare (Attacco Furtivo, Ispirazione Bardica...). */
+export interface NamedDice {
+  id: string;
+  name: string;
+  dice: DiceExpr;
+  damageType?: string;
+  note?: string;
+  when?: Condition;
 }
 
 /**
@@ -169,6 +248,7 @@ export interface Feature {
   toggles?: { id: string; name: string; when?: Condition }[];
   /** Incantesimi concessi dal privilegio (di dominio, di specie, di talento...). */
   spells?: GrantedSpell[];
+  dice?: NamedDice[];
 }
 
 /* ------------------------------------------------------------------ */
@@ -321,8 +401,16 @@ export interface BackgroundDef {
 export interface FeatDef {
   id: string;
   name: string;
-  category: "origin" | "general" | "fighting-style" | "epic-boon";
+  /** "option" = opzioni di classe che non sono talenti (Metamagia, Suppliche Occulte...), distinte dal tag. */
+  category: "origin" | "general" | "fighting-style" | "epic-boon" | "option";
   tags?: string[];
+  /** Si può prendere più volte (es. Aumento dei Punteggi di Caratteristica). */
+  repeatable?: boolean;
+  prerequisites?: {
+    minLevel?: { by: "total" | string; level: number };
+    /** Id di privilegi che il personaggio deve avere. */
+    features?: string[];
+  };
   feature: Feature;
 }
 
@@ -423,6 +511,8 @@ export interface CharacterState {
   heroicInspiration: boolean;
   /** Slot spesi per livello di incantesimo ("1".."9"). Opzionali: i personaggi salvati prima non li hanno. */
   spellSlotsSpent?: Record<string, number>;
+  /** Slot creati oltre la tabella (es. con i Punti Stregoneria): spariscono con il riposo lungo. */
+  spellSlotsBonus?: Record<string, number>;
   pactSlotsSpent?: number;
   concentration?: { spellId: string; name: string } | null;
 }
@@ -509,7 +599,18 @@ export interface ComputedAttack {
   masteryActive: boolean;
   properties: WeaponProperty[];
   critRange: number;
+  /** Colpo senz'armi: itemId è "unarmed". */
+  unarmed?: boolean;
+  /** Dadi in più a ogni colpo (es. Colpi Radiosi). */
+  extraDamage: { label: string; dice: string; damageType?: string }[];
 }
+
+export type ComputedAction = Omit<ActionDef, "roll"> & {
+  /** Dadi già risolti per il livello attuale. */
+  roll?: { dice: string; plus?: Value };
+  source: string;
+  available: boolean;
+};
 
 export interface SlotPool {
   level: number;
@@ -587,17 +688,24 @@ export interface ComputedSheet {
   hpMax: Stat;
   initiative: Stat & { advantage: boolean };
   speed: Stat;
+  /** Altre velocità (volo, nuoto, scalata, scavo), in piedi. */
+  speeds: Record<string, number>;
   hitDice: { die: Die; total: number; spent: number }[];
   critRange: number;
+  /** Attacchi con una singola azione di Attacco. */
+  attacksPerAction: number;
   attacks: ComputedAttack[];
+  /** Dadi con un nome (Attacco Furtivo, Ispirazione Bardica...), già risolti per il livello. */
+  dice: { id: string; name: string; expr: string; source: string; damageType?: string; note?: string }[];
   resources: ComputedResource[];
-  actions: (ActionDef & { source: string; available: boolean })[];
+  actions: ComputedAction[];
   toggles: { id: string; name: string; active: boolean; available: boolean }[];
   features: { id: string; name: string; source: string; description?: string }[];
   pendingChoices: (ChoiceDef & { source: string; required: number; made: number })[];
   widgets: WidgetRef[];
   resistances: string[];
   immunities: string[];
+  conditionImmunities: string[];
   senses: { sense: string; range: number }[];
   advantages: { on: string; label?: string }[];
   proficiencies: { armor: string[]; weapons: string[]; tools: string[]; languages: string[] };

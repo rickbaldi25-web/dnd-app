@@ -2,6 +2,7 @@ import {
   ABILITIES,
   applyDamage,
   applyHealing,
+  critDice,
   formatMod,
   longRest,
   roll,
@@ -391,9 +392,8 @@ export function AttacksWidget({ c }: WidgetProps) {
     const mode: RollMode = reckless && a.ability === "str" ? "advantage" : "normal";
     const hit = rollD20(a.toHit.value, mode);
     const crit = hit.kept >= a.critRange;
-    const [dice, ...flat] = a.damage.split(/(?=[+-])/);
     // Critico: si tirano due volte i dadi del danno, il bonus resta uno.
-    const dmgExpr = crit ? `${dice}+${dice}${flat.join("")}` : a.damage;
+    const dmgExpr = crit ? critDice(a.damage) : a.damage;
     const dmg = roll(dmgExpr);
     push({
       title: a.name,

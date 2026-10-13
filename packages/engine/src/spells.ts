@@ -216,10 +216,15 @@ export function computeSpellcasting(env: SpellcastingEnv): ComputedSpellcasting 
     shared.length === 1
       ? casterLevelOf(shared[0]!.progression, shared[0]!.level, false)
       : shared.reduce((a, s) => a + casterLevelOf(s.progression, s.level, true), 0);
-  const slots: SlotPool[] = slotsForCasterLevel(casterLevel).map((max, i) => {
-    const spent = Math.min(max, Math.max(0, ch.state.spellSlotsSpent?.[String(i + 1)] ?? 0));
-    return { level: i + 1, max, spent, remaining: max - spent };
-  });
+  const table = slotsForCasterLevel(casterLevel);
+  const slots: SlotPool[] = [];
+  for (let level = 1; level <= 9; level++) {
+    // Agli slot della tabella si sommano quelli creati (es. con i Punti Stregoneria).
+    const max = (table[level - 1] ?? 0) + Math.max(0, ch.state.spellSlotsBonus?.[String(level)] ?? 0);
+    if (max <= 0) continue;
+    const spent = Math.min(max, Math.max(0, ch.state.spellSlotsSpent?.[String(level)] ?? 0));
+    slots.push({ level, max, spent, remaining: max - spent });
+  }
 
   /* --- incantesimi disponibili --- */
   const spells: ComputedSpell[] = [];
