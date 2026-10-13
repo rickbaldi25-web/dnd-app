@@ -1,0 +1,21 @@
+{
+  "name": "@dnd/content-srd",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Contenuti SRD 5.2 (regole 2024) per @dnd/engine",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@dnd/engine": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  }
+}

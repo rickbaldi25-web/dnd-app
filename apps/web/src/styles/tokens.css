@@ -1,0 +1,77 @@
+/*
+ * Direzione visiva: "cianotipia". Le mappe dei dungeon si disegnano su carta
+ * millimetrata; qui la scheda è una cianografia: blu di Prussia, linee a gesso,
+ * tre colori di lavoro (rame = risorse, sangue = danno, verderame = cura).
+ * Quando il personaggio entra in Ira, le linee della griglia si fanno rosse.
+ */
+:root {
+  --font-display: "IM Fell English", "Iowan Old Style", Georgia, serif;
+  --font-body: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --step--1: 0.84rem;
+  --step-0: 1rem;
+  --step-1: 1.2rem;
+  --step-2: 1.5rem;
+  --step-3: 2.1rem;
+  --step-4: 3.4rem;
+
+  --radius: 6px;
+  --gap: 0.75rem;
+  --pad: 1rem;
+
+  /* Tema notte (predefinito) */
+  --bg: #173a57;
+  --bg-grid: rgba(233, 240, 244, 0.06);
+  --panel: #1d4565;
+  --panel-raised: #24527a;
+  --text: #e9f0f4;
+  --muted: #a9c0d1;
+  --line: rgba(233, 240, 244, 0.24);
+  --line-strong: rgba(233, 240, 244, 0.5);
+  --copper: #d89150;
+  --copper-ink: #1b2f40;
+  --blood: #e0675a;
+  --verdigris: #63bfa4;
+  --gold: #e6c56f;
+  --focus: #f3d98b;
+  color-scheme: dark;
+}
+
+/* Tema carta: stessa pianta, stampata in chiaro */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #e3edf2;
+    --bg-grid: rgba(23, 58, 87, 0.07);
+    --panel: #f2f7f9;
+    --panel-raised: #ffffff;
+    --text: #15344d;
+    --muted: #4c6a80;
+    --line: rgba(23, 58, 87, 0.22);
+    --line-strong: rgba(23, 58, 87, 0.5);
+    --copper: #b06a2a;
+    --copper-ink: #ffffff;
+    --blood: #b8382c;
+    --verdigris: #2c8a6f;
+    --gold: #9a7414;
+    --focus: #b06a2a;
+    color-scheme: light;
+  }
+}
+
+:root[data-theme="light"] {
+  --bg: #e3edf2;
+  --bg-grid: rgba(23, 58, 87, 0.07);
+  --panel: #f2f7f9;
+  --panel-raised: #ffffff;
+  --text: #15344d;
+  --muted: #4c6a80;
+  --line: rgba(23, 58, 87, 0.22);
+  --line-strong: rgba(23, 58, 87, 0.5);
+  --copper: #b06a2a;
+  --copper-ink: #ffffff;
+  --blood: #b8382c;
+  --verdigris: #2c8a6f;
+  --gold: #9a7414;
+  --focus: #b06a2a;
+  color-scheme: light;
+}

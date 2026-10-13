@@ -1,0 +1,18 @@
+{
+  "name": "dnd-app",
+  "private": true,
+  "version": "0.2.0",
+  "description": "Webapp D&D 5e (regole 2024): pannello Master + schede PG modulari",
+  "scripts": {
+    "dev": "pnpm --filter @dnd/web dev",
+    "emulators": "firebase emulators:start --project demo-dnd --import=.emulator-data --export-on-exit=.emulator-data",
+    "build": "pnpm --filter @dnd/web build",
+    "deploy": "pnpm build && firebase deploy --only hosting,firestore",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "firebase-tools": "^15.0.0"
+  },
+  "packageManager": "pnpm@10.28.0"
+}

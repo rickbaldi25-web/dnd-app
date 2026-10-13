@@ -1,0 +1,57 @@
+rules_version = '2';
+
+// Modello:
+//   users/{uid}           preferenze dell'utente (solo lui)
+//   characters/{id}       un personaggio; ownerUid = giocatore, campaignId opzionale
+//   campaigns/{id}        dmUid = Master, memberUids = giocatori
+//
+// Il giocatore modifica solo i propri personaggi.
+// Il Master legge e modifica i personaggi della sua campagna (danni, condizioni...).
+// I membri di una campagna vedono i personaggi del gruppo.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+    function uid() {
+      return request.auth.uid;
+    }
+    function campaignData(id) {
+      return get(/databases/$(database)/documents/campaigns/$(id)).data;
+    }
+    function isDm(id) {
+      return id != null && campaignData(id).dmUid == uid();
+    }
+    function isMember(id) {
+      return id != null && (campaignData(id).dmUid == uid() || uid() in campaignData(id).get('memberUids', []));
+    }
+
+    match /users/{userId} {
+      allow read, write: if signedIn() && uid() == userId;
+    }
+
+    match /characters/{charId} {
+      allow read: if signedIn() && (
+        resource.data.ownerUid == uid() ||
+        isMember(resource.data.get('campaignId', null))
+      );
+      allow create: if signedIn() && request.resource.data.ownerUid == uid();
+      allow update: if signedIn() && (
+        (resource.data.ownerUid == uid() && request.resource.data.ownerUid == uid()) ||
+        // il Master non può cambiare proprietario né spostare il personaggio
+        (isDm(resource.data.get('campaignId', null)) &&
+          request.resource.data.ownerUid == resource.data.ownerUid &&
+          request.resource.data.get('campaignId', null) == resource.data.get('campaignId', null))
+      );
+      allow delete: if signedIn() && resource.data.ownerUid == uid();
+    }
+
+    match /campaigns/{campaignId} {
+      allow read: if signedIn() && (resource.data.dmUid == uid() || uid() in resource.data.get('memberUids', []));
+      allow create: if signedIn() && request.resource.data.dmUid == uid();
+      allow update, delete: if signedIn() && resource.data.dmUid == uid();
+    }
+  }
+}
