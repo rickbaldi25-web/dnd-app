@@ -80,6 +80,17 @@ service cloud.firestore {
         allow read, write: if signedIn() && isDm(campaignId);
       }
 
+      // Registro dei tiri: ognuno aggiunge i propri, tutti i membri li leggono, nessuno li modifica.
+      match /rolls/{rollId} {
+        allow read: if signedIn() && isMember(campaignId);
+        allow create: if signedIn() && isMember(campaignId) && request.resource.data.uid == uid();
+        allow delete: if signedIn() && isDm(campaignId);
+      }
+      // Tiri segreti del Master.
+      match /secretRolls/{rollId} {
+        allow read, write: if signedIn() && isDm(campaignId);
+      }
+
       // Chi è connesso: ognuno scrive solo il proprio segnale, i membri leggono quelli di tutti.
       match /presence/{userId} {
         allow read: if signedIn() && isMember(campaignId);

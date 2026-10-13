@@ -42,6 +42,19 @@ export interface MonsterSecret {
   initiativeBonus: number;
 }
 
+/** Un tiro condiviso con la campagna. */
+export interface SharedRoll {
+  id: string;
+  uid: string;
+  /** Chi ha tirato: il nome del personaggio, oppure "Master". */
+  author: string;
+  title: string;
+  rolls: { label: string; expr: string; dice: number[]; total: number }[];
+  at: number;
+  /** Visibile solo al Master. */
+  secret?: boolean;
+}
+
 /** Ultimo segnale di presenza di un utente nella campagna. */
 export interface Presence {
   uid: string;
@@ -97,6 +110,10 @@ export interface Repository {
   /** Solo il Master: gli altri non ricevono nulla. Chiave = id del mostro. */
   watchMonsterSecrets(campaignId: string, cb: (secrets: Record<string, MonsterSecret>) => void): Unsubscribe;
   saveMonsterSecrets(campaignId: string, secrets: Record<string, MonsterSecret>): Promise<void>;
+  /** secret = tiro del Master che i giocatori non vedono. */
+  addRoll(campaignId: string, roll: Omit<SharedRoll, "id">): Promise<void>;
+  /** Gli ultimi tiri, dal più recente. secret = quelli riservati al Master. */
+  watchRolls(campaignId: string, secret: boolean, cb: (list: SharedRoll[]) => void): Unsubscribe;
   /** "Sono qui": da richiamare a intervalli finché la pagina è aperta. */
   touchPresence(campaignId: string, user: { uid: string; name: string }): Promise<void>;
   watchPresence(campaignId: string, cb: (list: Presence[]) => void): Unsubscribe;

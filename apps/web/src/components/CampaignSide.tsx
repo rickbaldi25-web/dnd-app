@@ -5,6 +5,7 @@ import { repo, type Campaign } from "../data";
 import { PartyCard } from "../pages/Campaign";
 import { usePresence } from "../state/presence";
 import { InitiativePanel } from "./Initiative";
+import { RollLog } from "./RollLog";
 
 const OPEN_KEY = "dnd.campaign-side.open";
 
@@ -61,6 +62,7 @@ export function CampaignSide({ campaignId, currentId, uid, onClose }: { campaign
           <PartyCard key={ch.id} ch={ch} canEdit={isDm} mine={ch.ownerUid === uid} online={online.some((p) => p.uid === ch.ownerUid)} current={ch.id === currentId} />
         ))}
       </ul>
+      <RollLog campaignId={campaign.id} isDm={isDm} />
     </aside>
   );
 }

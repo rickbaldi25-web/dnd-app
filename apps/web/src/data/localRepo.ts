@@ -1,11 +1,13 @@
 import { applyFieldChanges, diffFields, type CharacterData } from "@dnd/engine";
-import { newCampaignCode, type Campaign, type Encounter, type MonsterSecret, type Presence, type Repository, type UserPrefs } from "./repository";
+import { newCampaignCode, type Campaign, type Encounter, type MonsterSecret, type Presence, type SharedRoll, type Repository, type UserPrefs } from "./repository";
 
 const KEY = "dnd.characters.v1";
 const PREFS = "dnd.prefs.v1";
 const CAMPAIGNS = "dnd.campaigns.v1";
 /** Presenze solo in memoria: in modalità locale c'è un utente solo. */
 const presences = new Map<string, Presence[]>();
+/** Tiri condivisi: in memoria, in modalità locale servono solo a provare il riquadro. */
+const sharedRolls = new Map<string, SharedRoll[]>();
 const ENCOUNTERS = "dnd.encounters.v1";
 type StoredEncounter = { encounter?: Encounter; secrets?: Record<string, MonsterSecret> };
 
@@ -164,6 +166,17 @@ export const localRepo: Repository = {
   },
   async saveMonsterSecrets(campaignId, secrets) {
     writeEncounter(campaignId, { secrets });
+  },
+  async addRoll(campaignId, roll) {
+    const list = sharedRolls.get(campaignId) ?? [];
+    sharedRolls.set(campaignId, [{ ...roll, id: `${roll.at}-${list.length}` }, ...list].slice(0, 60));
+    notify();
+  },
+  watchRolls(campaignId, secret, cb) {
+    const emit = () => cb((sharedRolls.get(campaignId) ?? []).filter((r) => !!r.secret === secret));
+    listeners.add(emit);
+    emit();
+    return () => listeners.delete(emit);
   },
   async touchPresence(campaignId, user) {
     const rest = (presences.get(campaignId) ?? []).filter((p) => p.uid !== user.uid);

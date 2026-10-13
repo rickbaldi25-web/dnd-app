@@ -3,10 +3,12 @@ import {
   collection,
   arrayRemove,
   arrayUnion,
+  addDoc,
   deleteDoc,
   deleteField,
   doc,
   FieldPath,
+  limit,
   getDoc,
   onSnapshot,
   orderBy,
@@ -17,7 +19,7 @@ import {
   where,
   type Firestore,
 } from "firebase/firestore";
-import { newCampaignCode, type Campaign, type Encounter, type MonsterSecret, type Presence, type Repository, type UserPrefs } from "./repository";
+import { newCampaignCode, type Campaign, type Encounter, type MonsterSecret, type Presence, type SharedRoll, type Repository, type UserPrefs } from "./repository";
 
 /** Toglie i campi tecnici di Firestore prima di passare il personaggio al motore. */
 function toCharacter(id: string, data: Record<string, unknown>): CharacterData {
@@ -119,6 +121,14 @@ export function firestoreRepo(db: Firestore): Repository {
     },
     async saveMonsterSecrets(campaignId, secrets) {
       await setDoc(doc(db, "campaigns", campaignId, "secret", "encounter"), { monsters: secrets });
+    },
+    async addRoll(campaignId, roll) {
+      // I tiri segreti stanno in una raccolta a parte, che le regole aprono solo al Master.
+      await addDoc(collection(db, "campaigns", campaignId, roll.secret ? "secretRolls" : "rolls"), roll);
+    },
+    watchRolls(campaignId, secret, cb) {
+      const q = query(collection(db, "campaigns", campaignId, secret ? "secretRolls" : "rolls"), orderBy("at", "desc"), limit(30));
+      return onSnapshot(q, (snap) => cb(snap.docs.map((d) => ({ ...(d.data() as Omit<SharedRoll, "id">), id: d.id }))), () => cb([]));
     },
     async touchPresence(campaignId, user) {
       await setDoc(doc(presence(campaignId), user.uid), { name: user.name, at: Date.now() });

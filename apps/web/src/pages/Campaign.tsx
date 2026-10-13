@@ -2,10 +2,11 @@ import { applyDamage, applyHealing, applyProposal, computeSheet, longRest, short
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { InitiativePanel } from "../components/Initiative";
+import { RollLog } from "../components/RollLog";
 import { CONDITIONS, registry } from "../content";
 import { repo, type Campaign as CampaignData } from "../data";
 import { useAuth } from "../firebase/auth";
-import { useLog } from "../state/log";
+import { useLog, useShareRolls } from "../state/log";
 import { usePresence } from "../state/presence";
 
 const AUTOMATION_LABEL: Record<AutomationLevel, string> = { manual: "Manuale", assisted: "Assistita", full: "Completa" };
@@ -131,6 +132,8 @@ export function Campaign() {
   const [copied, setCopied] = useState(false);
 
   const online = usePresence(id);
+  const amDm = !!campaign && !!user && campaign.dmUid === user.uid;
+  useShareRolls(campaign && user ? { campaignId: campaign.id, uid: user.uid, author: amDm ? "Master" : user.name, canHide: amDm } : null);
   useEffect(() => repo.watchCampaign(id, setCampaign), [id]);
   useEffect(() => repo.watchCampaignCharacters(id, setParty), [id]);
   useEffect(() => (user ? repo.watchCharacters(user.uid, setOwn) : undefined), [user]);
@@ -247,6 +250,8 @@ export function Campaign() {
           <PartyCard key={ch.id} ch={ch} canEdit={isDm} mine={ch.ownerUid === user.uid} online={online.some((p) => p.uid === ch.ownerUid)} />
         ))}
       </ul>
+
+      <RollLog campaignId={campaign.id} isDm={isDm} />
 
       <section className="panel">
         <h2>I tuoi personaggi</h2>

@@ -10,6 +10,7 @@ import { ProposalDialog } from "../components/ProposalDialog";
 import { registry } from "../content";
 import { repo } from "../data";
 import { useAuth } from "../firebase/auth";
+import { useShareRolls } from "../state/log";
 import { useCharacter, useUserAutomation, type CharacterController } from "../state/useCharacter";
 import { EditModeContext } from "../widgets/core";
 import { EXTRA_WIDGETS, WIDGETS, type Zone } from "../widgets/registry";
@@ -83,6 +84,10 @@ export function Sheet() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sideOpen, setSideOpen] = useCampaignSide();
   const { user } = useAuth();
+
+  // I tiri fatti dalla scheda finiscono nel registro della campagna, a nome del personaggio.
+  const shareCampaign = c?.ch.campaignId;
+  useShareRolls(shareCampaign && user ? { campaignId: shareCampaign, uid: user.uid, author: c.ch.name, canHide: c.ch.ownerUid !== user.uid } : null);
 
   // La scheda reagisce alla vita: da metà PF in giù le luci dello sfondo crescono (theme.css).
   const hpCur = c?.ch.state.hpCurrent;

@@ -1457,3 +1457,33 @@ body:has(.sheet.is-raging) {
     box-shadow: none;
   }
 }
+
+/* Registro dei tiri della campagna */
+.roll-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  max-height: 22rem;
+  overflow-y: auto;
+}
+.roll-list li {
+  display: grid;
+  grid-template-columns: 2.6rem 1fr auto;
+  gap: 0.6rem;
+  align-items: baseline;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.roll-list li.is-secret {
+  opacity: 0.8;
+  font-style: italic;
+}
+.roll-total {
+  font-size: var(--step-1);
+  font-weight: 700;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.roll-detail {
+  display: block;
+}
