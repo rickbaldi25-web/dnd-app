@@ -1,5 +1,5 @@
 import { CHALLENGE_RATINGS, computeSheet, crXp, rollD20, type CharacterData, type MonsterDef } from "@dnd/engine";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { CONDITIONS, loadMonsters, registry } from "../content";
 import { repo, type Encounter, type EncounterMonster, type MonsterSecret } from "../data";
 import { useLog } from "../state/log";
@@ -402,7 +402,7 @@ export function InitiativePanel({ campaignId, party, isDm, uid }: { campaignId: 
 }
 
 /** Nella scheda: di chi è il turno, e il campo per la propria iniziativa. */
-export function TurnBanner({ ch, onInitiative }: { ch: CharacterData; onInitiative: (v: number | null) => void }) {
+export function TurnBanner({ ch, onInitiative, action }: { ch: CharacterData; onInitiative: (v: number | null) => void; action?: ReactNode }) {
   const { push } = useLog();
   const encounter = useEncounter(ch.campaignId);
   const [party, setParty] = useState<CharacterData[]>([]);
@@ -429,6 +429,7 @@ export function TurnBanner({ ch, onInitiative }: { ch: CharacterData; onInitiati
           }}
         />
       </label>
+      {action}
     </section>
   );
 }

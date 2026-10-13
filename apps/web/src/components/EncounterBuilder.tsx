@@ -1,11 +1,74 @@
 import { crXp, rateEncounter, type CharacterData, type EncounterDifficulty } from "@dnd/engine";
 import { useEffect, useState } from "react";
-import { repo, type EncounterPlan, type MonsterSecret, type PlanEntry } from "../data";
+import { repo, type Encounter, type EncounterPlan, type MonsterSecret, type PlanEntry } from "../data";
 import { useLog } from "../state/log";
 import { AddMonster, useEncounter, withMonsters } from "./Initiative";
 
 const DIFFICULTY: Record<EncounterDifficulty, string> = { trivial: "Banale", easy: "Facile", medium: "Medio", hard: "Difficile", deadly: "Mortale" };
 const pe = (n: number) => n.toLocaleString("it-IT");
+
+/** Porta i mostri di un incontro preparato in combattimento: lo apre se non ce n'è uno, altrimenti li aggiunge. */
+function startPlan(campaignId: string, encounter: Encounter | null, secrets: Record<string, MonsterSecret>, plan: EncounterPlan): Promise<unknown> {
+  const running = encounter?.active ? encounter : { active: true, round: 1, monsters: [] };
+  const next = withMonsters(
+    running,
+    encounter?.active ? secrets : {},
+    plan.entries.map((e) => ({ monster: { name: e.name, hp: e.hp, ac: e.ac, bonus: e.initiativeBonus, ...(e.monsterId ? { monsterId: e.monsterId } : {}) }, count: e.count })),
+  );
+  return Promise.all([repo.saveEncounter(campaignId, next.encounter), repo.saveMonsterSecrets(campaignId, next.secrets)]);
+}
+
+/**
+ * Fuori dal combattimento: gli incontri già pronti, da lanciare con un tasto.
+ * onPrepare porta alla scheda dove si preparano.
+ */
+export function QuickEncounters({ campaignId, party, onPrepare }: { campaignId: string; party: CharacterData[]; onPrepare: () => void }) {
+  const { push } = useLog();
+  const encounter = useEncounter(campaignId);
+  const [plans, setPlans] = useState<EncounterPlan[]>([]);
+  useEffect(() => repo.watchEncounterPlans(campaignId, setPlans), [campaignId]);
+  const failed = (e: unknown) => push({ title: "Salvataggio non riuscito", lines: [String(e instanceof Error ? e.message : e)], tone: "bad" });
+  const levels = party.map((ch) => Math.max(1, ch.levels.length));
+  const ready = plans.filter((p) => p.entries.length > 0);
+  return (
+    <section className="panel quick-encounters">
+      <div className="row between">
+        <h2>Incontri pronti</h2>
+        <button className="link-btn" onClick={onPrepare}>
+          Prepara
+        </button>
+      </div>
+      {ready.length === 0 && <p className="muted small">Nessun incontro preparato. Puoi iniziare un combattimento vuoto e aggiungere i mostri al momento.</p>}
+      <ul className="quick-list">
+        {ready.map((plan) => {
+          const rating = rateEncounter(levels, plan.entries);
+          return (
+            <li key={plan.id}>
+              <span className="quick-name">
+                <strong>{plan.name}</strong>
+                <span className="muted small">{plan.entries.map((e) => `${e.count} × ${e.name}`).join(", ")}</span>
+              </span>
+              {rating.difficulty && <span className={`tag diff-${rating.difficulty}`}>{DIFFICULTY[rating.difficulty]}</span>}
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  // In questo riquadro non c'è mai un combattimento in corso: si parte da zero.
+                  startPlan(campaignId, encounter, {}, plan).catch(failed);
+                  push({ title: `${plan.name}: mostri in combattimento`, lines: plan.entries.map((e) => `${e.count} × ${e.name}`), rolls: [] });
+                }}
+              >
+                Inizia
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      <button className="btn" onClick={() => repo.saveEncounter(campaignId, { active: true, round: 1, monsters: [] }).catch(failed)}>
+        Combattimento vuoto
+      </button>
+    </section>
+  );
+}
 
 /** Incontri preparati dal Master, con il conto dei PE rispetto al gruppo. I giocatori non li vedono. */
 export function EncounterBuilder({ campaignId, party, onLaunch }: { campaignId: string; party: CharacterData[]; onLaunch?: () => void }) {
@@ -34,14 +97,7 @@ export function EncounterBuilder({ campaignId, party, onLaunch }: { campaignId: 
     setOpenId(id);
   };
   const launch = (plan: EncounterPlan) => {
-    const running = encounter?.active ? encounter : { active: true, round: 1, monsters: [] };
-    const next = withMonsters(
-      running,
-      encounter?.active ? secrets : {},
-      plan.entries.map((e) => ({ monster: { name: e.name, hp: e.hp, ac: e.ac, bonus: e.initiativeBonus, ...(e.monsterId ? { monsterId: e.monsterId } : {}) }, count: e.count })),
-    );
-    repo.saveEncounter(campaignId, next.encounter).catch(failed);
-    repo.saveMonsterSecrets(campaignId, next.secrets).catch(failed);
+    startPlan(campaignId, encounter, secrets, plan).catch(failed);
     push({ title: `${plan.name}: mostri in combattimento`, lines: plan.entries.map((e) => `${e.count} × ${e.name}`), rolls: [] });
     onLaunch?.();
   };

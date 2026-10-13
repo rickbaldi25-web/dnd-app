@@ -1446,7 +1446,7 @@ body:has(.sheet.is-raging) {
 /* Dove c'è spazio la scheda si stringe e il pannello le sta accanto; sugli schermi stretti le passa sopra. */
 @media (min-width: 1100px) {
   /* Lo spazio del pannello si toglie a tutta la pagina: scheda e barra in alto restano centrate in ciò che rimane. */
-  body:has(.sheet.has-side) {
+  body:has(.has-side) {
     padding-right: 380px;
   }
   /* Sugli schermi grandi la scheda si allarga per usare lo spazio invece di lasciare due fasce vuote. */

@@ -2,15 +2,16 @@ import type { WidgetRef } from "@dnd/engine";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { AutomationSwitch } from "../components/AutomationSwitch";
-import { CampaignSide, useCampaignSide } from "../components/CampaignSide";
+import { Badge, CampaignDrawer, useCampaignSide } from "../components/CampaignSide";
 import { ChoicesPanel } from "../components/ChoicesPanel";
-import { TurnBanner } from "../components/Initiative";
+import { TurnBanner, useEncounter } from "../components/Initiative";
 import { LevelUpDialog } from "../components/LevelUpDialog";
 import { ProposalDialog } from "../components/ProposalDialog";
 import { registry } from "../content";
 import { repo } from "../data";
 import { useAuth } from "../firebase/auth";
 import { useShareRolls } from "../state/log";
+import { useCampaignNews } from "../state/news";
 import { useCharacter, useUserAutomation, type CharacterController } from "../state/useCharacter";
 import { EditModeContext } from "../widgets/core";
 import { EXTRA_WIDGETS, WIDGETS, type Zone } from "../widgets/registry";
@@ -21,12 +22,15 @@ const ZONES: { zone: Zone; label: string }[] = [
   { zone: "sheet", label: "Scheda" },
 ];
 
-function Zones({ c }: { c: CharacterController }) {
+/** In combattimento non servono: si ritrovano nella scheda completa. */
+const NOT_IN_COMBAT = new Set(["hit-dice"]);
+
+function Zones({ c, combat }: { c: CharacterController; combat: boolean }) {
   const refs: WidgetRef[] = [...c.sheet.widgets, ...EXTRA_WIDGETS];
   return (
     <>
-      {ZONES.map(({ zone, label }) => {
-        const items = refs.filter((w) => WIDGETS[w.widget]?.zone === zone);
+      {ZONES.filter(({ zone }) => !combat || zone !== "sheet").map(({ zone, label }) => {
+        const items = refs.filter((w) => WIDGETS[w.widget]?.zone === zone && !(combat && NOT_IN_COMBAT.has(w.widget)));
         return (
           <section key={zone} id={`zona-${zone}`} className={`zone zone-${zone}`} aria-label={label}>
             {items.map((w, i) => {
@@ -46,7 +50,7 @@ function Zones({ c }: { c: CharacterController }) {
 }
 
 /** Su telefono: barra fissa in basso per saltare alle tre zone; evidenzia quella sullo schermo. */
-function ZoneTabs() {
+function ZoneTabs({ combat }: { combat: boolean }) {
   const [active, setActive] = useState<Zone>("vitals");
   useEffect(() => {
     const io = new IntersectionObserver(
@@ -62,10 +66,10 @@ function ZoneTabs() {
       if (el) io.observe(el);
     }
     return () => io.disconnect();
-  }, []);
+  }, [combat]);
   return (
     <nav className="tabbar" aria-label="Sezioni della scheda">
-      {ZONES.map(({ zone, label }) => (
+      {ZONES.filter(({ zone }) => !combat || zone !== "sheet").map(({ zone, label }) => (
         <a key={zone} href={`#zona-${zone}`} className={active === zone ? "is-on" : ""} aria-current={active === zone ? "true" : undefined}>
           {label}
         </a>
@@ -84,6 +88,12 @@ export function Sheet() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sideOpen, setSideOpen] = useCampaignSide();
   const { user } = useAuth();
+  // Quando il Master avvia un combattimento la scheda passa da sola alla vista ridotta; si può tornare a quella completa.
+  const fighting = !!useEncounter(c?.ch.campaignId)?.active;
+  const [fullView, setFullView] = useState(false);
+  useEffect(() => setFullView(false), [fighting]);
+  const combat = fighting && !fullView;
+  const news = useCampaignNews(c?.ch.campaignId, user?.uid, !!user && c?.campaignDmUid === user.uid);
 
   // I tiri fatti dalla scheda finiscono nel registro della campagna, a nome del personaggio.
   const shareCampaign = c?.ch.campaignId;
@@ -117,7 +127,7 @@ export function Sheet() {
 
   return (
     <EditModeContext.Provider value={edit}>
-      <main className={`page sheet ${raging ? "is-raging" : ""} ${ch.campaignId && sideOpen ? "has-side" : ""}`}>
+      <main className={`page sheet ${raging ? "is-raging" : ""} ${ch.campaignId && sideOpen ? "has-side" : ""} ${combat ? "is-combat" : ""}`}>
         <header className="sheet-head">
           <Link to="/" className="back" aria-label="Torna ai personaggi">
             ‹
@@ -132,6 +142,7 @@ export function Sheet() {
             {ch.campaignId && (
               <button className={`btn ${sideOpen ? "" : "btn-primary"}`} aria-expanded={sideOpen} onClick={() => setSideOpen(!sideOpen)}>
                 {sideOpen ? "Nascondi campagna" : "Campagna"}
+                {!sideOpen && <Badge n={news.handouts + news.diary} />}
               </button>
             )}
             <button className="btn" onClick={() => setLvlOpen(true)} disabled={sheet.level >= 20}>
@@ -180,8 +191,18 @@ export function Sheet() {
 
         {edit && <p className="edit-banner">Modalità correzione: tocca un numero per forzarlo. Lascialo uguale al calcolato per annullare.</p>}
 
-        {ch.campaignId && !sideOpen && <TurnBanner ch={ch} onInitiative={(v) => c.update((x) => ({ ...x, state: { ...x.state, initiative: v } }))} />}
-        <ChoicesPanel c={c} />
+        {ch.campaignId && (fighting || !sideOpen) && (
+          <TurnBanner
+            ch={ch}
+            onInitiative={(v) => c.update((x) => ({ ...x, state: { ...x.state, initiative: v } }))}
+            action={
+              <button className="btn btn-quiet" onClick={() => setFullView(!fullView)}>
+                {fullView ? "Vista di combattimento" : "Scheda completa"}
+              </button>
+            }
+          />
+        )}
+        {!combat && <ChoicesPanel c={c} />}
         {warnings.length > 0 && (
           <ul className="problems">
             {warnings.map((w, i) => (
@@ -192,10 +213,10 @@ export function Sheet() {
           </ul>
         )}
 
-        <Zones c={c} />
-        <ZoneTabs />
+        <Zones c={c} combat={combat} />
+        <ZoneTabs combat={combat} />
 
-        {ch.campaignId && sideOpen && user && <CampaignSide campaignId={ch.campaignId} currentId={ch.id} uid={user.uid} onClose={() => setSideOpen(false)} />}
+        {ch.campaignId && user && <CampaignDrawer campaignId={ch.campaignId} currentId={ch.id} uid={user.uid} sections={["turno", "gruppo", "handout", "diario", "tiri"]} news={news} open={sideOpen} onToggle={setSideOpen} pageLink />}
 
         <ProposalDialog c={c} />
         <LevelUpDialog c={c} open={lvlOpen} onClose={() => setLvlOpen(false)} />

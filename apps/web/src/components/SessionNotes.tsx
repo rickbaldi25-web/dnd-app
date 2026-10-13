@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { repo, type SessionNote } from "../data";
 import { useLog } from "../state/log";
+import { isNewRecap, markSeen, recapStamp, useSeen } from "../state/news";
 
 const today = () => {
   const d = new Date();
@@ -55,6 +56,7 @@ export function SessionNotes({ campaignId, isDm }: { campaignId: string; isDm: b
   const [sessions, setSessions] = useState<SessionNote[]>([]);
   const [secrets, setSecrets] = useState<Record<string, string>>({});
   const [openId, setOpenId] = useState<string | null>(null);
+  const seen = useSeen("sessions", campaignId);
   useEffect(() => repo.watchSessions(campaignId, setSessions), [campaignId]);
   useEffect(() => (isDm ? repo.watchSessionSecrets(campaignId, setSecrets) : undefined), [campaignId, isDm]);
 
@@ -102,8 +104,13 @@ export function SessionNotes({ campaignId, isDm }: { campaignId: string; isDm: b
           return (
             <li key={s.id} className={open ? "is-open" : ""}>
               <div className="row between">
-                <button className="disclosure" aria-expanded={open} onClick={() => setOpenId(open ? null : s.id)}>
+                <button className="disclosure" aria-expanded={open} onClick={() => {
+                    setOpenId(open ? null : s.id);
+                    if (!isDm) markSeen("sessions", campaignId, s.id, recapStamp(s));
+                  }}
+                >
                   {s.title}
+                  {!isDm && isNewRecap(s, seen) && <span className="tag handout-new"> nuovo</span>}
                 </button>
                 <span className="muted small">
                   {showDate(s.date)}

@@ -1,7 +1,8 @@
 import type { CharacterData } from "@dnd/engine";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { repo, type Handout } from "../data";
 import { useLog } from "../state/log";
+import { handoutStamp, isNewHandout, markSeen, useSeen } from "../state/news";
 
 /** Solo indirizzi https: è l'unica cosa che finisce in un attributo src. */
 function safeImageUrl(raw: string): string | undefined {
@@ -10,15 +11,6 @@ function safeImageUrl(raw: string): string | undefined {
     return url.protocol === "https:" ? url.href : undefined;
   } catch {
     return undefined;
-  }
-}
-
-const seenKey = (campaignId: string) => `dnd.handouts.seen.${campaignId}`;
-function readSeen(campaignId: string): Record<string, number> {
-  try {
-    return JSON.parse(localStorage.getItem(seenKey(campaignId)) ?? "{}");
-  } catch {
-    return {};
   }
 }
 
@@ -56,25 +48,9 @@ export function HandoutsPanel({ campaignId, isDm, uid, party, compact = false }:
   const [list, setList] = useState<Handout[]>([]);
   const [openId, setOpenId] = useState<string | null>(null);
   const [editing, setEditing] = useState<string | "new" | null>(null);
-  const [seen, setSeen] = useState<Record<string, number>>(() => readSeen(campaignId));
-  const known = useRef<Record<string, number> | null>(null);
+  const seen = useSeen("handouts", campaignId);
 
-  useEffect(() => {
-    known.current = null;
-    setSeen(readSeen(campaignId));
-    return repo.watchHandouts(campaignId, { uid, isDm }, setList);
-  }, [campaignId, uid, isDm]);
-
-  // Avviso quando il Master mostra qualcosa di nuovo, ma non per ciò che c'era già all'apertura.
-  useEffect(() => {
-    if (isDm) return;
-    const now = Object.fromEntries(list.map((h) => [h.id, h.revealedAt ?? h.createdAt]));
-    if (known.current) {
-      const fresh = list.filter((h) => (known.current![h.id] ?? 0) < now[h.id]!);
-      if (fresh.length) push({ title: fresh.length === 1 ? "Nuovo handout" : "Nuovi handout", lines: fresh.map((h) => h.title), rolls: [], tone: "good" });
-    }
-    known.current = now;
-  }, [list, isDm, push]);
+  useEffect(() => repo.watchHandouts(campaignId, { uid, isDm }, setList), [campaignId, uid, isDm]);
 
   /** I giocatori a cui si può mostrare un handout: chi ha un personaggio nella campagna. */
   const players = useMemo(() => {
@@ -85,20 +61,11 @@ export function HandoutsPanel({ campaignId, isDm, uid, party, compact = false }:
 
   const failed = (e: unknown) => push({ title: "Salvataggio non riuscito", lines: [String(e instanceof Error ? e.message : e)], tone: "bad" });
   const save = (h: Handout) => repo.saveHandout(campaignId, h).catch(failed);
-  const markSeen = (h: Handout) => {
-    const next = { ...seen, [h.id]: h.revealedAt ?? h.createdAt };
-    setSeen(next);
-    try {
-      localStorage.setItem(seenKey(campaignId), JSON.stringify(next));
-    } catch {
-      /* storage bloccato: resta segnato solo per questa visita */
-    }
-  };
   const toggle = (h: Handout) => {
     setOpenId(openId === h.id ? null : h.id);
-    if (!isDm) markSeen(h);
+    if (!isDm) markSeen("handouts", campaignId, h.id, handoutStamp(h));
   };
-  const isNew = (h: Handout) => !isDm && (seen[h.id] ?? 0) < (h.revealedAt ?? h.createdAt);
+  const isNew = (h: Handout) => !isDm && isNewHandout(h, seen);
   const sorted = [...list].sort((a, b) => (isDm ? b.createdAt - a.createdAt : (b.revealedAt ?? b.createdAt) - (a.revealedAt ?? a.createdAt)));
 
   if (!isDm && list.length === 0) {

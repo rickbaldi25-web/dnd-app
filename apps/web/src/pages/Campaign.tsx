@@ -1,154 +1,24 @@
-import { applyDamage, applyHealing, applyProposal, computeSheet, longRest, shortRest, type AutomationLevel, type CharacterData, type ComputedSheet } from "@dnd/engine";
-import { useEffect, useMemo, useState } from "react";
+import { applyProposal, longRest, shortRest, type AutomationLevel, type CharacterData } from "@dnd/engine";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router";
-import { EncounterBuilder } from "../components/EncounterBuilder";
+import { EncounterBuilder, QuickEncounters } from "../components/EncounterBuilder";
 import { HandoutsPanel } from "../components/Handouts";
 import { HomebrewPanel } from "../components/Homebrew";
-import { InitiativePanel } from "../components/Initiative";
+import { Badge, CampaignDrawer } from "../components/CampaignSide";
+import { CombatView } from "../components/CombatView";
+import { useEncounter } from "../components/Initiative";
+import { PartyCard, PartyGlance } from "../components/PartyCard";
 import { RollLog } from "../components/RollLog";
 import { SessionNotes } from "../components/SessionNotes";
-import { CONDITIONS, registry } from "../content";
+import { registry } from "../content";
 import { repo, type Campaign as CampaignData } from "../data";
 import { useAuth } from "../firebase/auth";
 import { useLog, useShareRolls } from "../state/log";
 import { useHomebrew } from "../state/homebrew";
+import { useCampaignNews } from "../state/news";
 import { usePresence } from "../state/presence";
 
 const AUTOMATION_LABEL: Record<AutomationLevel, string> = { manual: "Manuale", assisted: "Assistita", full: "Completa" };
-
-function sheetOf(ch: CharacterData): ComputedSheet | null {
-  try {
-    return computeSheet(ch, registry);
-  } catch {
-    return null;
-  }
-}
-
-/** Un personaggio del gruppo: ciò che serve al tavolo, più i comandi rapidi del Master. */
-export function PartyCard({ ch, canEdit, mine, online, current = false }: { ch: CharacterData; canEdit: boolean; mine: boolean; online: boolean; current?: boolean }) {
-  const { push } = useLog();
-  const [amount, setAmount] = useState("");
-  const [rounds, setRounds] = useState("");
-  const sheet = useMemo(() => sheetOf(ch), [ch]);
-  if (!sheet) {
-    return (
-      <li className="panel party-card">
-        <h2>{ch.name}</h2>
-        <p className="muted small">Dati che il motore non riconosce.</p>
-      </li>
-    );
-  }
-  const s = ch.state;
-  const max = sheet.hpMax.value;
-  const classes = Object.entries(sheet.classLevels)
-    .map(([id, n]) => `${registry.classes.get(id)?.name ?? id} ${n}`)
-    .join(" / ");
-  const sc = sheet.spellcasting;
-  const slots = [...(sc?.slots ?? []).map((p) => `${p.level}° ${p.remaining}/${p.max}`), ...(sc?.pact ? [`Patto ${sc.pact.level}° ${sc.pact.remaining}/${sc.pact.max}`] : [])];
-  const n = Math.max(0, Math.floor(Number(amount) || 0));
-  const failed = (e: unknown) => push({ title: "Salvataggio non riuscito", lines: [String(e instanceof Error ? e.message : e)], tone: "bad" });
-  const durations = s.conditionRounds ?? {};
-  const addCondition = (id: string) => {
-    const n = Math.floor(Number(rounds) || 0);
-    repo.updateCharacter(ch, { ...ch, state: { ...s, conditions: [...s.conditions, id], conditionRounds: n > 0 ? { ...durations, [id]: n } : durations } }).catch(failed);
-    setRounds("");
-  };
-  const removeCondition = (id: string) => {
-    const { [id]: _gone, ...rest } = durations;
-    repo.updateCharacter(ch, { ...ch, state: { ...s, conditions: s.conditions.filter((x) => x !== id), conditionRounds: rest } }).catch(failed);
-  };
-  const conditionLabel = (id: string) => `${CONDITIONS[id] ?? id}${durations[id] ? ` (${durations[id]})` : ""}`;
-  const act = (kind: "damage" | "heal") => {
-    const p = kind === "damage" ? applyDamage(ch, sheet, n) : applyHealing(ch, sheet, n);
-    repo.updateCharacter(ch, applyProposal(ch, p)).catch((e) => push({ title: "Salvataggio non riuscito", lines: [String(e?.message ?? e)], tone: "bad" }));
-    push({ title: `${ch.name}: ${kind === "damage" ? "danno" : "cura"} ${n}`, lines: p.lines, rolls: [], tone: kind === "damage" ? "bad" : "good" });
-    setAmount("");
-  };
-  return (
-    <li className={`panel party-card ${s.hpCurrent === 0 ? "is-down" : ""} ${current ? "is-open" : ""}`}>
-      <header className="panel-head">
-        <h2>
-          <span className={`presence-dot ${online ? "is-online" : ""}`} role="img" aria-label={online ? "Connesso" : "Non connesso"} title={online ? "Connesso" : "Non connesso"} />
-          {ch.name}
-        </h2>
-        <span className="muted small">{classes}</span>
-      </header>
-      <div className="party-hp">
-        <span className="party-hp-number">
-          {s.hpCurrent}
-          <span className="muted"> / {max}</span>
-          {s.hpTemp > 0 && <span className="party-temp"> +{s.hpTemp}</span>}
-        </span>
-        <span className="party-bar" role="img" aria-label={`Punti ferita ${s.hpCurrent} su ${max}`}>
-          <span style={{ width: `${max ? Math.min(100, (s.hpCurrent / max) * 100) : 0}%` }} />
-        </span>
-      </div>
-      <dl className="party-stats">
-        <div>
-          <dt>CA</dt>
-          <dd>{sheet.ac.value}</dd>
-        </div>
-        <div>
-          <dt>Perc. passiva</dt>
-          <dd>{sheet.passivePerception}</dd>
-        </div>
-        <div>
-          <dt>Iniziativa</dt>
-          <dd>
-            {sheet.initiative.value >= 0 ? "+" : ""}
-            {sheet.initiative.value}
-          </dd>
-        </div>
-      </dl>
-      {(s.conditions.length > 0 || s.exhaustion > 0 || sc?.concentration) && (
-        <p className="party-tags">
-          {s.conditions.map((c) =>
-            canEdit ? (
-              <button key={c} className="tag tag-bad tag-btn" aria-label={`Togli ${CONDITIONS[c] ?? c}`} onClick={() => removeCondition(c)}>
-                {conditionLabel(c)} ×
-              </button>
-            ) : (
-              <span key={c} className="tag tag-bad">
-                {conditionLabel(c)}
-              </span>
-            ),
-          )}
-          {s.exhaustion > 0 && <span className="tag tag-bad">Indebolimento {s.exhaustion}</span>}
-          {sc?.concentration && <span className="tag">Concentrazione: {sc.concentration.name}</span>}
-        </p>
-      )}
-      {slots.length > 0 && <p className="small">Slot: {slots.join(" · ")}</p>}
-      {sheet.resources.length > 0 && <p className="small muted">{sheet.resources.map((r) => `${r.name} ${r.remaining}/${r.max}`).join(" · ")}</p>}
-      {canEdit && (
-        <div className="party-controls">
-          <input type="number" min={0} value={amount} placeholder="PF" aria-label={`Punti ferita per ${ch.name}`} className="party-amount" onChange={(e) => setAmount(e.currentTarget.value)} />
-          <button className="btn btn-danger" disabled={!n} onClick={() => act("damage")}>
-            Danno
-          </button>
-          <button className="btn btn-heal" disabled={!n} onClick={() => act("heal")}>
-            Cura
-          </button>
-          <input type="number" min={1} value={rounds} placeholder="round" title="Durata in round: vuoto = finché non la togli" aria-label={`Durata in round della condizione per ${ch.name}`} className="party-amount" onChange={(e) => setRounds(e.currentTarget.value)} />
-          <select value="" aria-label={`Aggiungi una condizione a ${ch.name}`} onChange={(e) => e.currentTarget.value && addCondition(e.currentTarget.value)}>
-            <option value="">Condizione…</option>
-            {Object.entries(CONDITIONS)
-              .filter(([id]) => !s.conditions.includes(id))
-              .map(([id, label]) => (
-                <option key={id} value={id}>
-                  {label}
-                </option>
-              ))}
-          </select>
-        </div>
-      )}
-      {(canEdit || mine) && !current && (
-        <Link className="link-btn party-open" to={`/c/${ch.id}`}>
-          Apri la scheda
-        </Link>
-      )}
-    </li>
-  );
-}
 
 export function Campaign() {
   const { id = "" } = useParams();
@@ -160,10 +30,19 @@ export function Campaign() {
   const [own, setOwn] = useState<CharacterData[]>([]);
   const [copied, setCopied] = useState(false);
   const [params, setParams] = useSearchParams();
+  const [drawer, setDrawer] = useState(false);
 
   const online = usePresence(id);
+  const fighting = !!useEncounter(id)?.active;
+  // A combattimento finito chi era rimasto su "Al tavolo" torna alla vista del momento, così al prossimo segue di nuovo il combattimento.
+  const wasFighting = useRef(fighting);
+  useEffect(() => {
+    if (wasFighting.current && !fighting && params.get("scheda") === "tavolo") setParams({}, { replace: true });
+    wasFighting.current = fighting;
+  }, [fighting, params, setParams]);
   const { homebrew } = useHomebrew(id);
   const amDm = !!campaign && !!user && campaign.dmUid === user.uid;
+  const news = useCampaignNews(campaign?.id, user?.uid, amDm);
   useShareRolls(campaign && user ? { campaignId: campaign.id, uid: user.uid, author: amDm ? "Master" : user.name, canHide: amDm } : null);
   useEffect(() => repo.watchCampaign(id, setCampaign), [id]);
   useEffect(() => repo.watchCampaignCharacters(id, setParty), [id]);
@@ -181,9 +60,19 @@ export function Campaign() {
 
   const isDm = campaign.dmUid === user.uid;
   // La scheda aperta sta nell'indirizzo: resta al ricaricamento e il tasto indietro torna alla precedente.
-  const tabs = [{ id: "tavolo", label: "Al tavolo" }, ...(isDm ? [{ id: "incontri", label: "Incontri" }] : []), { id: "diario", label: "Diario" }, { id: "contenuti", label: "Contenuti" }, { id: "gestione", label: "Gestione" }];
-  const tab = tabs.find((t) => t.id === params.get("scheda"))?.id ?? "tavolo";
-  const go = (id: string) => setParams(id === "tavolo" ? {} : { scheda: id });
+  const tabs = [
+    ...(fighting ? [{ id: "combattimento", label: "Combattimento" }] : []),
+    { id: "tavolo", label: "Esplorazione" },
+    ...(isDm ? [{ id: "incontri", label: "Incontri", prep: true }] : []),
+    { id: "diario", label: "Diario", prep: !isDm },
+    { id: "contenuti", label: "Contenuti" },
+    { id: "gestione", label: "Gestione" },
+  ];
+  // Senza una scelta nell'indirizzo vale la vista del momento: il combattimento se ce n'è uno, altrimenti il tavolo.
+  const home = fighting ? "combattimento" : "tavolo";
+  const tab = tabs.find((t) => t.id === params.get("scheda"))?.id ?? home;
+  const go = (id: string) => setParams(id === home ? {} : { scheda: id });
+  const onlineUids = online.map((p) => p.uid);
   const save = (prev: CharacterData, next: CharacterData) =>
     repo.updateCharacter(prev, next).catch((e) => push({ title: "Salvataggio non riuscito", lines: [String(e?.message ?? e)], tone: "bad" }));
   const link = (ch: CharacterData, on: boolean) => save(ch, { ...ch, campaignId: on ? campaign.id : undefined });
@@ -211,7 +100,7 @@ export function Campaign() {
   };
 
   return (
-    <main className="page campaign">
+    <main className={`page campaign ${drawer ? "has-side" : ""}`}>
       <header className="sheet-head">
         <Link to="/campaigns" className="back" aria-label="Torna alle campagne">
           ‹
@@ -245,13 +134,20 @@ export function Campaign() {
 
       <nav className="tabs" role="tablist" aria-label="Sezioni della campagna">
         {tabs.map((t) => (
-          <button key={t.id} role="tab" id={`tab-${t.id}`} aria-selected={tab === t.id} aria-controls={`pannello-${t.id}`} className={tab === t.id ? "is-on" : ""} onClick={() => go(t.id)}>
+          <button key={t.id} role="tab" id={`tab-${t.id}`} aria-selected={tab === t.id} aria-controls={`pannello-${t.id}`} className={`${tab === t.id ? "is-on" : ""} ${t.id === "combattimento" ? "is-combat" : ""} ${"prep" in t && t.prep ? "starts-group" : ""}`} onClick={() => go(t.id)}>
             {t.label}
+            <Badge n={t.id === "tavolo" ? news.handouts : t.id === "diario" ? news.diary : 0} />
           </button>
         ))}
       </nav>
 
       {/* Le sezioni restano tutte montate: cambiando scheda non si perde ciò che si stava scrivendo né gli avvisi. */}
+      {fighting && (
+        <div role="tabpanel" id="pannello-combattimento" aria-labelledby="tab-combattimento" className="tab-panel" hidden={tab !== "combattimento"}>
+          <CombatView campaignId={campaign.id} party={party} isDm={isDm} uid={user.uid} online={onlineUids} showRolls={tab === "combattimento"} />
+        </div>
+      )}
+
       <div role="tabpanel" id="pannello-tavolo" aria-labelledby="tab-tavolo" className="tab-panel" hidden={tab !== "tavolo"}>
         {!isDm && campaign.automationLock && <p className="muted small">Il Master ha fissato l'automazione delle schede su: {AUTOMATION_LABEL[campaign.automationLock]}.</p>}
         {party.length === 0 && (
@@ -265,7 +161,17 @@ export function Campaign() {
         {/* A sinistra ciò che si gioca (iniziativa, gruppo), a destra ciò che si consulta */}
         <div className="campaign-layout">
           <div className="campaign-main">
-            <InitiativePanel campaignId={campaign.id} party={party} isDm={isDm} uid={user.uid} />
+            {fighting ? (
+              <section className="panel turn-banner">
+                <p>
+                  <strong>Combattimento in corso</strong>
+                </p>
+                <button className="btn btn-primary" onClick={() => go("combattimento")}>
+                  Vai al combattimento
+                </button>
+              </section>
+            ) : null}
+            {isDm && <PartyGlance party={party} />}
 
             {party.length > 0 && (
               <div className="row between section-row">
@@ -292,7 +198,9 @@ export function Campaign() {
           </div>
 
           <aside className="campaign-aside">
-            <RollLog campaignId={campaign.id} isDm={isDm} />
+            {isDm && !fighting && <QuickEncounters campaignId={campaign.id} party={party} onPrepare={() => go("incontri")} />}
+
+            {tab !== "combattimento" && <RollLog campaignId={campaign.id} isDm={isDm} />}
 
             <HandoutsPanel campaignId={campaign.id} isDm={isDm} uid={user.uid} party={party} />
           </aside>
@@ -301,7 +209,7 @@ export function Campaign() {
 
       {isDm && (
         <div role="tabpanel" id="pannello-incontri" aria-labelledby="tab-incontri" className="tab-panel" hidden={tab !== "incontri"}>
-          <EncounterBuilder campaignId={campaign.id} party={party} onLaunch={() => go("tavolo")} />
+          <EncounterBuilder campaignId={campaign.id} party={party} onLaunch={() => setParams({})} />
         </div>
       )}
 
@@ -374,6 +282,7 @@ export function Campaign() {
           </button>
         )}
       </div>
+      <CampaignDrawer campaignId={campaign.id} uid={user.uid} sections={["handout", "diario", "gruppo"]} news={news} open={drawer} onToggle={setDrawer} />
     </main>
   );
 }

@@ -820,3 +820,270 @@ select option {
 .more-btn[aria-expanded="true"]::after {
   transform: translateY(0.05rem) rotate(-135deg);
 }
+
+/* Vista di combattimento della campagna */
+.tabs button.is-combat:not(.is-on) {
+  border-color: var(--blood);
+  color: var(--blood);
+}
+.combat-layout {
+  display: grid;
+  gap: var(--gap);
+}
+.combat-layout > * {
+  min-width: 0;
+}
+.combat-side {
+  display: grid;
+  gap: var(--gap);
+  align-content: start;
+}
+.combat-side > *,
+.combat-layout .initiative {
+  margin-bottom: 0;
+}
+.spotlight h2 .muted {
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+.spotlight .party {
+  margin: 0.5rem 0 0;
+}
+.spotlight .party-card {
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+@media (min-width: 1000px) {
+  .combat-layout {
+    grid-template-columns: minmax(0, 1.25fr) minmax(320px, 1fr);
+    align-items: start;
+  }
+  .combat-side {
+    position: sticky;
+    top: 4.5rem;
+    max-height: calc(100dvh - 5.5rem);
+    overflow-y: auto;
+    padding-right: 2px;
+  }
+}
+
+/* Il gruppo in una riga */
+.party-strip {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0 0 2px;
+  overflow-x: auto;
+  list-style: none;
+}
+.party-strip li {
+  flex: 1 0 9.5rem;
+  max-width: 16rem;
+}
+.party-chip {
+  display: grid;
+  gap: 0.2rem;
+  width: 100%;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.party-chip.is-current {
+  border-color: var(--accent-edge);
+  box-shadow: 0 0 0 1px var(--copper);
+}
+.party-chip.is-open {
+  background: var(--field);
+}
+.party-chip.is-down .party-chip-name {
+  text-decoration: line-through;
+  color: var(--muted);
+}
+.party-chip-name {
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.party-chip-hp {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.party-chip .party-bar {
+  display: block;
+  height: 6px;
+  margin-top: 0;
+  overflow: hidden;
+}
+.party-chip .party-bar span {
+  display: block;
+  height: 100%;
+  background: var(--verdigris);
+}
+.party-chip.is-down .party-bar span {
+  background: var(--blood);
+}
+.party-chip-tags {
+  font-size: var(--step--1);
+  color: var(--blood);
+}
+.party-strip-open {
+  margin-top: 0.5rem;
+}
+
+/* Scheda in combattimento: il riquadro del turno resta in vista */
+.sheet.is-combat .turn-banner {
+  position: sticky;
+  top: 3.9rem;
+  z-index: 4;
+}
+.turn-banner.is-mine {
+  animation: my-turn 1.6s ease-in-out 3;
+}
+@keyframes my-turn {
+  50% {
+    box-shadow: 0 0 0 3px var(--copper), var(--shadow);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .turn-banner.is-mine {
+    animation: none;
+  }
+}
+
+/* Cassetto della campagna */
+.drawer-handle {
+  position: fixed;
+  top: 40%;
+  right: 0;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.9rem 0.45rem;
+  border: 1px solid var(--accent-edge);
+  border-right: 0;
+  border-radius: 12px 0 0 12px;
+  background: var(--copper);
+  color: var(--copper-ink);
+  font: inherit;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  writing-mode: vertical-rl;
+  cursor: pointer;
+  box-shadow: var(--shadow);
+}
+.drawer-handle .badge {
+  writing-mode: horizontal-tb;
+}
+.campaign-side {
+  display: grid;
+  gap: var(--gap);
+  align-content: start;
+}
+.campaign-side > * {
+  margin-bottom: 0;
+  min-width: 0;
+}
+.campaign-side > header {
+  margin-bottom: 0;
+}
+.drawer-tabs {
+  margin: 0;
+}
+.drawer-tabs button {
+  min-height: 38px;
+  padding: 0.3rem 0.6rem;
+}
+.badge {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.3rem;
+  height: 1.3rem;
+  margin-left: 0.4rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: var(--blood);
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+/* Schede di preparazione: staccate da quelle di gioco */
+.tabs button.starts-group {
+  margin-left: 0.75rem;
+  position: relative;
+}
+.tabs button.starts-group::before {
+  content: "";
+  position: absolute;
+  left: calc(-0.5rem - 1px);
+  top: 20%;
+  bottom: 20%;
+  border-left: 1px solid var(--line-strong);
+}
+
+/* Incontri pronti */
+.quick-list {
+  list-style: none;
+  margin: 0.5rem 0;
+  padding: 0;
+}
+.quick-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+  border-top: 1px solid var(--line);
+}
+.quick-name {
+  display: grid;
+  flex: 1 1 9rem;
+  min-width: 0;
+}
+
+/* Gruppo a colpo d'occhio */
+.table-scroll {
+  overflow-x: auto;
+}
+.party-glance table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.party-glance th,
+.party-glance td {
+  padding: 0.4rem 0.6rem;
+  border-top: 1px solid var(--line);
+  text-align: left;
+  vertical-align: baseline;
+}
+.party-glance thead th {
+  border-top: 0;
+  font-size: var(--step--1);
+  font-weight: 700;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.party-glance tbody th {
+  font-weight: 700;
+  white-space: nowrap;
+}
+.party-glance .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.party-glance td.is-best {
+  font-weight: 800;
+  color: var(--heading);
+}
