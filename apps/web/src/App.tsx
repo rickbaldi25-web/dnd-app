@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from "./firebase/auth";
 import { Campaign } from "./pages/Campaign";
 import { Campaigns } from "./pages/Campaigns";
 import { Characters } from "./pages/Characters";
+import { Credits } from "./pages/Credits";
 import { Login } from "./pages/Login";
 import { NewCharacter } from "./pages/NewCharacter";
 import { Sheet } from "./pages/Sheet";
@@ -13,14 +14,16 @@ function TopBar() {
   const { user, localMode, signOut } = useAuth();
   return (
     <nav className="topbar">
-      <a href="/" className="brand">
-        Schede & Sessioni
-      </a>
+      <NavLink to="/" className="brand">
+        <img src="/logo.png" alt="" className="brand-mark" />
+        Brock's DnD
+      </NavLink>
       <span className="topbar-links">
         <NavLink to="/" end>
           Personaggi
         </NavLink>
         <NavLink to="/campaigns">Campagne</NavLink>
+        <NavLink to="/crediti">Crediti</NavLink>
       </span>
       <span className="topbar-user">
         <ThemeSwitch />
@@ -64,6 +67,7 @@ function Shell() {
         <Route path="/" element={<Characters />} />
         <Route path="/new" element={<NewCharacter />} />
         <Route path="/c/:id" element={<Sheet />} />
+        <Route path="/crediti" element={<Credits />} />
         <Route path="/campaigns" element={<Campaigns />} />
         <Route path="/campaigns/:id" element={<Campaign />} />
         <Route path="*" element={<Characters />} />

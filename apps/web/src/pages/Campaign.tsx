@@ -1,6 +1,8 @@
 import { applyDamage, applyHealing, applyProposal, computeSheet, longRest, shortRest, type AutomationLevel, type CharacterData, type ComputedSheet } from "@dnd/engine";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
+import { EncounterBuilder } from "../components/EncounterBuilder";
+import { HandoutsPanel } from "../components/Handouts";
 import { HomebrewPanel } from "../components/Homebrew";
 import { InitiativePanel } from "../components/Initiative";
 import { RollLog } from "../components/RollLog";
@@ -260,11 +262,15 @@ export function Campaign() {
       )}
       <InitiativePanel campaignId={campaign.id} party={party} isDm={isDm} uid={user.uid} />
 
+      {isDm && <EncounterBuilder campaignId={campaign.id} party={party} />}
+
       <ul className="party">
         {party.map((ch) => (
           <PartyCard key={ch.id} ch={ch} canEdit={isDm} mine={ch.ownerUid === user.uid} online={online.some((p) => p.uid === ch.ownerUid)} />
         ))}
       </ul>
+
+      <HandoutsPanel campaignId={campaign.id} isDm={isDm} uid={user.uid} party={party} />
 
       <RollLog campaignId={campaign.id} isDm={isDm} />
 

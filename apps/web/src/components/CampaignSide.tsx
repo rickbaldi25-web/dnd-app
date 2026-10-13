@@ -4,6 +4,7 @@ import { Link } from "react-router";
 import { repo, type Campaign } from "../data";
 import { PartyCard } from "../pages/Campaign";
 import { usePresence } from "../state/presence";
+import { HandoutsPanel } from "./Handouts";
 import { InitiativePanel } from "./Initiative";
 import { RollLog } from "./RollLog";
 
@@ -57,6 +58,7 @@ export function CampaignSide({ campaignId, currentId, uid, onClose }: { campaign
         </button>
       </header>
       <InitiativePanel campaignId={campaign.id} party={party} isDm={isDm} uid={uid} />
+      <HandoutsPanel campaignId={campaign.id} isDm={isDm} uid={uid} party={party} compact />
       <ul className="party">
         {party.map((ch) => (
           <PartyCard key={ch.id} ch={ch} canEdit={isDm} mine={ch.ownerUid === uid} online={online.some((p) => p.uid === ch.ownerUid)} current={ch.id === currentId} />

@@ -10,3 +10,4 @@ export * from "./patch.js";
 export * from "./play.js";
 export * from "./level.js";
 export * from "./create.js";
+export * from "./encounter.js";

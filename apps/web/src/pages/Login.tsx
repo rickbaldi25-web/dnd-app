@@ -8,7 +8,8 @@ export function Login() {
   return (
     <main className="login">
       <div className="login-card">
-        <h1 className="login-title">Schede & Sessioni</h1>
+        <img src="/logo.png" alt="" className="login-mark" />
+        <h1 className="login-title">Brock's DnD</h1>
         <p>Le schede del tuo gruppo, sempre aggiornate: al tavolo dal telefono o a distanza.</p>
         <button
           className="btn btn-primary btn-large"

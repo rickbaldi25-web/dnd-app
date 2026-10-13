@@ -1,4 +1,4 @@
-import { computeSheet, rollD20, type CharacterData, type MonsterDef } from "@dnd/engine";
+import { CHALLENGE_RATINGS, computeSheet, crXp, rollD20, type CharacterData, type MonsterDef } from "@dnd/engine";
 import { useEffect, useMemo, useState } from "react";
 import { CONDITIONS, loadMonsters, registry } from "../content";
 import { repo, type Encounter, type EncounterMonster, type MonsterSecret } from "../data";
@@ -69,14 +69,44 @@ function InitiativeInput({ value, bonus, label, onChange }: { value: number | nu
   );
 }
 
-/** Aggiunta di mostri: dalla raccolta importata (con ricerca) oppure scritti a mano. */
-function AddMonster({ onAdd }: { onAdd: (m: { name: string; hp: number; ac: number; bonus: number; monsterId?: string }, count: number) => void }) {
+/** Un mostro da aggiungere: preso dalla raccolta o scritto a mano. */
+export interface NewMonster {
+  name: string;
+  hp: number;
+  ac: number;
+  bonus: number;
+  monsterId?: string;
+  cr?: string;
+}
+
+/**
+ * Aggiunge dei mostri al combattimento: quelli uguali si numerano, così al tavolo si distinguono.
+ * Restituisce il combattimento e i dati riservati al Master, da salvare entrambi.
+ */
+export function withMonsters(encounter: Encounter, secrets: Record<string, MonsterSecret>, groups: { monster: NewMonster; count: number }[]): { encounter: Encounter; secrets: Record<string, MonsterSecret> } {
+  const monsters = [...encounter.monsters];
+  const nextSecrets = { ...secrets };
+  const stamp = Date.now().toString(36);
+  for (const { monster: m, count } of groups) {
+    const taken = monsters.filter((x) => x.name === m.name || x.name.startsWith(`${m.name} `)).length;
+    for (let i = 0; i < count; i++) {
+      const id = `m-${stamp}-${monsters.length}`;
+      monsters.push({ id, name: count > 1 || taken > 0 ? `${m.name} ${taken + i + 1}` : m.name, initiative: null });
+      nextSecrets[id] = { hp: m.hp, hpMax: m.hp, ac: m.ac, initiativeBonus: m.bonus, ...(m.monsterId ? { monsterId: m.monsterId } : {}) };
+    }
+  }
+  return { encounter: { ...encounter, monsters }, secrets: nextSecrets };
+}
+
+/** Aggiunta di mostri: dalla raccolta importata (con ricerca) oppure scritti a mano. withCr chiede anche il grado di sfida. */
+export function AddMonster({ onAdd, withCr = false }: { onAdd: (m: NewMonster, count: number) => void; withCr?: boolean }) {
   const [library, setLibrary] = useState<MonsterDef[] | null>(null);
   const [name, setName] = useState("");
   const [picked, setPicked] = useState<MonsterDef | undefined>();
   const [hp, setHp] = useState("");
   const [ac, setAc] = useState("");
   const [bonus, setBonus] = useState("0");
+  const [cr, setCr] = useState("");
   const [count, setCount] = useState("1");
   // La raccolta è grande: si scarica alla prima volta che il Master tocca il campo.
   const open = () => {
@@ -90,6 +120,7 @@ function AddMonster({ onAdd }: { onAdd: (m: { name: string; hp: number; ac: numb
     setHp(String(m.hp));
     setAc(String(m.ac));
     setBonus(String(Math.floor((m.abilities.dex - 10) / 2)));
+    setCr(crXp(m.cr) || m.cr === "0" ? m.cr : "");
   };
   const exact = matches.length === 1 && matches[0]!.name.toLowerCase() === q;
   return (
@@ -102,6 +133,19 @@ function AddMonster({ onAdd }: { onAdd: (m: { name: string; hp: number; ac: numb
           Iniz.{" "}
           <input type="number" value={bonus} aria-label="Bonus all'iniziativa" className="short-input" onChange={(e) => setBonus(e.currentTarget.value)} />
         </label>
+        {withCr && (
+          <label className="small">
+            GS{" "}
+            <select value={cr} aria-label="Grado di sfida" onChange={(e) => setCr(e.currentTarget.value)}>
+              <option value="">—</option>
+              {CHALLENGE_RATINGS.map((x) => (
+                <option key={x} value={x}>
+                  {x}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="small">
           Quanti{" "}
           <input type="number" min={1} max={20} value={count} aria-label="Quanti" className="short-input" onChange={(e) => setCount(e.currentTarget.value)} />
@@ -112,12 +156,13 @@ function AddMonster({ onAdd }: { onAdd: (m: { name: string; hp: number; ac: numb
           onClick={() => {
             // La scheda resta collegata solo se il nome è ancora quello scelto dalla raccolta.
             const monsterId = picked && picked.name === name.trim() ? picked.id : undefined;
-            onAdd({ name: name.trim(), hp: Math.max(1, Number(hp) || 1), ac: Number(ac) || 10, bonus: Number(bonus) || 0, monsterId }, Math.max(1, Math.min(20, Number(count) || 1)));
+            onAdd({ name: name.trim(), hp: Math.max(1, Number(hp) || 1), ac: Number(ac) || 10, bonus: Number(bonus) || 0, ...(monsterId ? { monsterId } : {}), ...(withCr && cr ? { cr } : {}) }, Math.max(1, Math.min(20, Number(count) || 1)));
             setPicked(undefined);
             setName("");
             setHp("");
             setAc("");
             setBonus("0");
+            setCr("");
             setCount("1");
           }}
         >
@@ -231,18 +276,10 @@ export function InitiativePanel({ campaignId, party, isDm, uid }: { campaignId: 
     setMonster(m.id, { conditions: on ? { ...rest, [id]: n > 0 ? n : null } : rest });
     setRounds({ ...rounds, [m.id]: "" });
   };
-  const addMonsters = (m: { name: string; hp: number; ac: number; bonus: number; monsterId?: string }, count: number) => {
-    const added: EncounterMonster[] = [];
-    const nextSecrets = { ...secrets };
-    const taken = encounter.monsters.filter((x) => x.name === m.name || x.name.startsWith(`${m.name} `)).length;
-    for (let i = 0; i < count; i++) {
-      const id = `m-${Date.now().toString(36)}-${i}`;
-      // Più mostri uguali si numerano, così al tavolo si distinguono.
-      added.push({ id, name: count > 1 || taken > 0 ? `${m.name} ${taken + i + 1}` : m.name, initiative: null });
-      nextSecrets[id] = { hp: m.hp, hpMax: m.hp, ac: m.ac, initiativeBonus: m.bonus, ...(m.monsterId ? { monsterId: m.monsterId } : {}) };
-    }
-    save({ ...encounter, monsters: [...encounter.monsters, ...added] });
-    saveSecrets(nextSecrets);
+  const addMonsters = (monster: NewMonster, count: number) => {
+    const next = withMonsters(encounter, secrets, [{ monster, count }]);
+    save(next.encounter);
+    saveSecrets(next.secrets);
   };
   const hit = (id: string, sign: 1 | -1) => {
     const s = secrets[id];

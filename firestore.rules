@@ -89,6 +89,15 @@ service cloud.firestore {
         allow read, write: if signedIn() && isDm(campaignId);
       }
 
+      // Fogli del Master: lui li vede e li scrive tutti; un giocatore legge solo quelli che gli sono stati mostrati.
+      match /handouts/{handoutId} {
+        allow read: if signedIn() && (
+          isDm(campaignId) ||
+          (isMember(campaignId) && (resource.data.everyone == true || uid() in resource.data.visibleTo))
+        );
+        allow write: if signedIn() && isDm(campaignId);
+      }
+
       // Registro dei tiri: ognuno aggiunge i propri, tutti i membri li leggono, nessuno li modifica.
       match /rolls/{rollId} {
         allow read: if signedIn() && isMember(campaignId);

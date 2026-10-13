@@ -46,6 +46,41 @@ export interface MonsterSecret {
   monsterId?: string;
 }
 
+/** Un gruppo di mostri uguali in un incontro preparato. */
+export interface PlanEntry {
+  name: string;
+  count: number;
+  hp: number;
+  ac: number;
+  initiativeBonus: number;
+  /** Grado di sfida, per il conto dei PE. */
+  cr?: string;
+  monsterId?: string;
+}
+
+/** Un incontro che il Master prepara prima della sessione. Lo vede solo lui. */
+export interface EncounterPlan {
+  id: string;
+  name: string;
+  entries: PlanEntry[];
+}
+
+/** Un foglio che il Master mostra ai giocatori: una lettera, una mappa, un ritratto. */
+export interface Handout {
+  id: string;
+  title: string;
+  text: string;
+  /** Indirizzo https di un'immagine già online. */
+  imageUrl?: string;
+  /** Visibile a tutti i giocatori. */
+  everyone: boolean;
+  /** Oppure solo a questi utenti (uid). */
+  visibleTo: string[];
+  createdAt: number;
+  /** Quando è stato mostrato l'ultima volta: serve a ordinare e a segnalare i nuovi. */
+  revealedAt?: number;
+}
+
 /** Oggetti e incantesimi propri della campagna, inseriti dal Master. */
 export interface Homebrew {
   items: ItemDef[];
@@ -120,6 +155,14 @@ export interface Repository {
   /** Solo il Master: gli altri non ricevono nulla. Chiave = id del mostro. */
   watchMonsterSecrets(campaignId: string, cb: (secrets: Record<string, MonsterSecret>) => void): Unsubscribe;
   saveMonsterSecrets(campaignId: string, secrets: Record<string, MonsterSecret>): Promise<void>;
+  /** Solo il Master: gli incontri preparati. */
+  watchEncounterPlans(campaignId: string, cb: (plans: EncounterPlan[]) => void): Unsubscribe;
+  saveEncounterPlans(campaignId: string, plans: EncounterPlan[]): Promise<void>;
+  /** Il Master li riceve tutti, un giocatore solo quelli che gli sono stati mostrati. */
+  watchHandouts(campaignId: string, viewer: { uid: string; isDm: boolean }, cb: (list: Handout[]) => void): Unsubscribe;
+  /** Solo il Master: crea o sostituisce. */
+  saveHandout(campaignId: string, handout: Handout): Promise<void>;
+  deleteHandout(campaignId: string, id: string): Promise<void>;
   watchHomebrew(campaignId: string, cb: (h: Homebrew | null) => void): Unsubscribe;
   /** Solo il Master. */
   saveHomebrew(campaignId: string, homebrew: Homebrew): Promise<void>;

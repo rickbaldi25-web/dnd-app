@@ -1,5 +1,5 @@
 import { applyFieldChanges, diffFields, type CharacterData } from "@dnd/engine";
-import { newCampaignCode, type Campaign, type Encounter, type Homebrew, type MonsterSecret, type Presence, type SharedRoll, type Repository, type UserPrefs } from "./repository";
+import { newCampaignCode, type Campaign, type Encounter, type EncounterPlan, type Handout, type Homebrew, type MonsterSecret, type Presence, type SharedRoll, type Repository, type UserPrefs } from "./repository";
 
 const KEY = "dnd.characters.v1";
 const PREFS = "dnd.prefs.v1";
@@ -9,7 +9,7 @@ const presences = new Map<string, Presence[]>();
 /** Tiri condivisi: in memoria, in modalità locale servono solo a provare il riquadro. */
 const sharedRolls = new Map<string, SharedRoll[]>();
 const ENCOUNTERS = "dnd.encounters.v1";
-type StoredEncounter = { encounter?: Encounter; secrets?: Record<string, MonsterSecret>; homebrew?: Homebrew };
+type StoredEncounter = { encounter?: Encounter; secrets?: Record<string, MonsterSecret>; homebrew?: Homebrew; plans?: EncounterPlan[]; handouts?: Handout[] };
 
 function readEncounters(): Record<string, StoredEncounter> {
   try {
@@ -166,6 +166,28 @@ export const localRepo: Repository = {
   },
   async saveMonsterSecrets(campaignId, secrets) {
     writeEncounter(campaignId, { secrets });
+  },
+  watchEncounterPlans(campaignId, cb) {
+    const emit = () => cb(readEncounters()[campaignId]?.plans ?? []);
+    listeners.add(emit);
+    emit();
+    return () => listeners.delete(emit);
+  },
+  async saveEncounterPlans(campaignId, plans) {
+    writeEncounter(campaignId, { plans });
+  },
+  watchHandouts(campaignId, viewer, cb) {
+    const emit = () => cb((readEncounters()[campaignId]?.handouts ?? []).filter((h) => viewer.isDm || h.everyone || h.visibleTo.includes(viewer.uid)));
+    listeners.add(emit);
+    emit();
+    return () => listeners.delete(emit);
+  },
+  async saveHandout(campaignId, handout) {
+    const list = readEncounters()[campaignId]?.handouts ?? [];
+    writeEncounter(campaignId, { handouts: list.some((h) => h.id === handout.id) ? list.map((h) => (h.id === handout.id ? handout : h)) : [...list, handout] });
+  },
+  async deleteHandout(campaignId, id) {
+    writeEncounter(campaignId, { handouts: (readEncounters()[campaignId]?.handouts ?? []).filter((h) => h.id !== id) });
   },
   watchHomebrew(campaignId, cb) {
     const emit = () => cb(readEncounters()[campaignId]?.homebrew ?? null);

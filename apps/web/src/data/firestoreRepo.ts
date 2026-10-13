@@ -21,7 +21,7 @@ import {
   writeBatch,
   type Firestore,
 } from "firebase/firestore";
-import { newCampaignCode, type Campaign, type Encounter, type Homebrew, type MonsterSecret, type Presence, type SharedRoll, type Repository, type UserPrefs } from "./repository";
+import { newCampaignCode, type Campaign, type Encounter, type EncounterPlan, type Handout, type Homebrew, type MonsterSecret, type Presence, type SharedRoll, type Repository, type UserPrefs } from "./repository";
 
 /** Toglie i campi tecnici di Firestore prima di passare il personaggio al motore. */
 function toCharacter(id: string, data: Record<string, unknown>): CharacterData {
@@ -123,6 +123,34 @@ export function firestoreRepo(db: Firestore): Repository {
     },
     async saveMonsterSecrets(campaignId, secrets) {
       await setDoc(doc(db, "campaigns", campaignId, "secret", "encounter"), { monsters: secrets });
+    },
+    watchEncounterPlans(campaignId, cb) {
+      return onSnapshot(doc(db, "campaigns", campaignId, "secret", "plans"), (d) => cb((d.data()?.plans as EncounterPlan[]) ?? []), () => cb([]));
+    },
+    async saveEncounterPlans(campaignId, plans) {
+      await setDoc(doc(db, "campaigns", campaignId, "secret", "plans"), { plans });
+    },
+    watchHandouts(campaignId, viewer, cb) {
+      const col = collection(db, "campaigns", campaignId, "handouts");
+      const read = (d: { id: string; data(): Record<string, unknown> }) => ({ ...(d.data() as unknown as Omit<Handout, "id">), id: d.id });
+      if (viewer.isDm) return onSnapshot(col, (snap) => cb(snap.docs.map(read)), () => cb([]));
+      // Le regole fanno leggere a un giocatore solo ciò che gli è stato mostrato: servono due ricerche, poi unite.
+      let forAll: Handout[] = [];
+      let forMe: Handout[] = [];
+      const emit = () => cb([...forAll, ...forMe.filter((h) => !forAll.some((x) => x.id === h.id))]);
+      const stopAll = onSnapshot(query(col, where("everyone", "==", true)), (snap) => { forAll = snap.docs.map(read); emit(); }, () => { forAll = []; emit(); });
+      const stopMine = onSnapshot(query(col, where("visibleTo", "array-contains", viewer.uid)), (snap) => { forMe = snap.docs.map(read); emit(); }, () => { forMe = []; emit(); });
+      return () => {
+        stopAll();
+        stopMine();
+      };
+    },
+    async saveHandout(campaignId, handout) {
+      const { id, ...data } = handout;
+      await setDoc(doc(db, "campaigns", campaignId, "handouts", id), data);
+    },
+    async deleteHandout(campaignId, id) {
+      await deleteDoc(doc(db, "campaigns", campaignId, "handouts", id));
     },
     watchHomebrew(campaignId, cb) {
       return onSnapshot(doc(db, "campaigns", campaignId, "state", "homebrew"), (d) => cb(d.exists() ? { items: d.data().items ?? [], spells: d.data().spells ?? [] } : null), () => cb(null));
