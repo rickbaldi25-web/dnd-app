@@ -8,9 +8,9 @@
  * Chiave = id del privilegio (o dell'opzione). "*.suffisso" vale per tutti gli id che finiscono
  * così, quando non c'è una voce con l'id esatto (es. gli stili di combattimento, uguali per più classi).
  */
-import type { ActionDef, ContentPack, Feature, Value } from "@dnd/engine";
+import type { ActionDef, Condition, ContentPack, Feature, Value } from "@dnd/engine";
 
-type Mechanics = Pick<Feature, "effects" | "actions" | "resources" | "choices" | "dice" | "spells">;
+type Mechanics = Pick<Feature, "effects" | "actions" | "resources" | "choices" | "dice" | "spells" | "toggles" | "widgets">;
 
 /** Tabella per livello di classe a partire dalle soglie: at("rogue", { 1: 2, 6: 4 }). */
 const at = (by: string, thresholds: Record<number, number>): Value => {
@@ -29,6 +29,13 @@ const note = (id: string, name: string, timing: ActionDef["timing"], description
 });
 
 const CHANNEL = "cleric.channel-divinity";
+const PALADIN_CHANNEL = "paladin.channel-divinity";
+const RAGING: Condition = { toggle: "raging" };
+const MARTIAL_DIE = at("monk", { 1: 4, 5: 6, 11: 8, 17: 10 });
+const ALL_SKILLS = [
+  "acrobatics", "animal-handling", "arcana", "athletics", "deception", "history", "insight", "intimidation", "investigation",
+  "medicine", "nature", "perception", "performance", "persuasion", "religion", "sleight-of-hand", "stealth", "survival",
+];
 
 export const MECHANICS: Record<string, Mechanics> = {
   /* ---------------- Comuni a più classi ---------------- */
@@ -133,6 +140,172 @@ export const MECHANICS: Record<string, Mechanics> = {
   "wizard.school-of-abjuration.arcane-ward": {
     resources: [{ id: "wizard.arcane-ward", name: "Interdizione Arcana (PF)", max: { sum: [{ times: [{ level: "wizard" }, 2] }, { mod: "int" }] }, longRest: "all" }],
   },
+
+  /* ---------------- Barbaro ---------------- */
+  "barbarian.rage": {
+    toggles: [{ id: "raging", name: "Ira" }],
+    widgets: [{ widget: "toggle", ref: "raging", props: { accent: "danger" } }],
+    actions: [
+      { id: "barbarian.rage", name: "Ira", timing: "bonus", cost: { resource: "barbarian.rage", amount: 1 }, outcome: { kind: "toggleOn", toggle: "raging" }, when: { not: { toggle: "raging" } } },
+      { id: "barbarian.rage.end", name: "Termina l'Ira", timing: "bonus", outcome: { kind: "toggleOff", toggle: "raging" }, when: { toggle: "raging" } },
+    ],
+    effects: [
+      { type: "bonus", target: "damage.str", value: at("barbarian", { 1: 2, 9: 3, 16: 4 }), when: RAGING, label: "Ira" },
+      { type: "grant", target: "resistance", values: ["bludgeoning", "piercing", "slashing"], when: RAGING },
+      { type: "advantage", on: "check.str", when: RAGING, label: "Ira" },
+      { type: "advantage", on: "save.str", when: RAGING, label: "Ira" },
+    ],
+  },
+  "barbarian.reckless-attack": { actions: [note("barbarian.reckless-attack", "Attacco Irruento", "free", "Vantaggio ai tuoi attacchi in mischia con Forza per questo turno; gli attacchi contro di te hanno vantaggio fino al tuo prossimo turno.")] },
+  "barbarian.danger-sense": { effects: [{ type: "advantage", on: "save.dex", label: "Percezione del Pericolo (effetti che vedi)" }] },
+  "barbarian.feral-instinct": { effects: [{ type: "advantage", on: "initiative", label: "Istinto Ferino" }] },
+  "barbarian.relentless-rage": { actions: [note("barbarian.relentless-rage", "Ira Implacabile", "free", "Se scendi a 0 PF in ira: tiro salvezza su Costituzione CD 10 (+5 a ogni uso fino al riposo) per restare a 1 PF.")] },
+  "barbarian.primal-champion": { effects: [{ type: "abilityMax", ability: "str", value: 24 }, { type: "abilityMax", ability: "con", value: 24 }] },
+  "barbarian.path-of-the-berserker.frenzy": { actions: [note("barbarian.frenzy", "Frenesia", "free", "Per questa ira: un attacco in mischia come azione bonus a ogni turno. A fine ira subisci 1 livello di indebolimento.")] },
+  "barbarian.path-of-the-berserker.mindless-rage": { effects: [{ type: "grant", target: "conditionImmunity", values: ["charmed", "frightened"], when: RAGING }] },
+  "barbarian.path-of-the-berserker.retaliation": { actions: [note("barbarian.retaliation", "Ritorsione", "reaction", "Un attacco in mischia contro una creatura entro 1,5 m che ti ha appena ferito.")] },
+  "barbarian.optional.totem-spirit-bear": {
+    effects: [{ type: "grant", target: "resistance", values: ["acid", "cold", "fire", "force", "lightning", "necrotic", "poison", "radiant", "thunder"], when: RAGING }],
+  },
+  "barbarian.optional.totem-spirit-elk": { effects: [{ type: "bonus", target: "speed.walk", value: 15, when: RAGING, label: "Spirito dell'Alce" }] },
+
+  /* ---------------- Bardo ---------------- */
+  "bard.bardic-inspiration": {
+    resources: [{ id: "bard.bardic-inspiration", name: "Ispirazione Bardica", max: { max: [1, { mod: "cha" }] }, longRest: "all" }],
+    dice: [{ id: "bard.bardic-inspiration", name: "Dado di Ispirazione Bardica", dice: { sides: at("bard", { 1: 6, 5: 8, 10: 10, 15: 12 }) } }],
+    actions: [note("bard.bardic-inspiration", "Ispirazione Bardica", "bonus", "Una creatura entro 18 m che ti sente ottiene un dado di Ispirazione Bardica per 10 minuti.", "bard.bardic-inspiration")],
+  },
+  "bard.song-of-rest": { dice: [{ id: "bard.song-of-rest", name: "Canto di Riposo", dice: { sides: at("bard", { 2: 6, 9: 8, 13: 10, 17: 12 }) }, note: "PF extra a chi spende Dadi Vita nel riposo breve" }] },
+  "bard.countercharm": { actions: [note("bard.countercharm", "Controfascino", "action", "Fino alla fine del tuo prossimo turno, tu e gli alleati entro 9 m avete vantaggio ai tiri salvezza contro spaventato e affascinato.")] },
+  "bard.college-of-lore.cutting-words": { actions: [note("bard.cutting-words", "Parole Taglienti", "reaction", "Sottrai un dado di Ispirazione Bardica a un tiro per colpire, una prova o un tiro per i danni di una creatura entro 18 m.", "bard.bardic-inspiration")] },
+  "bard.college-of-lore.bonus-proficiencies": { choices: [{ id: "bard.college-of-lore.skills", kind: "skill", label: "Competenze Bonus", count: 3, from: ALL_SKILLS }] },
+  "bard.college-of-valor.bonus-proficiencies": { effects: [{ type: "grant", target: "armor", values: ["medium", "shield"] }, { type: "grant", target: "weapon", values: ["martial"] }] },
+
+  /* ---------------- Druido ---------------- */
+  "druid.wild-shape": { actions: [note("druid.wild-shape", "Forma Selvatica", "action", "Assumi la forma di una bestia che hai già visto, per un numero di ore pari a metà del tuo livello da druido.", "druid.wild-shape")] },
+  "druid.wild-companion": { actions: [note("druid.wild-companion", "Compagno Selvatico", "action", "Lanci trova famiglio senza componenti materiali: il famiglio è un folletto e resta per metà del tuo livello da druido in ore.", "druid.wild-shape")] },
+  "druid.circle-of-the-land.natural-recovery": {
+    actions: [
+      {
+        id: "druid.natural-recovery",
+        name: "Recupero Naturale",
+        timing: "special",
+        cost: { resource: "druid.natural-recovery", amount: 1 },
+        outcome: { kind: "recoverSlots", budget: halfUp({ level: "druid" }), maxLevel: 5 },
+        description: "Durante un riposo breve, una volta al giorno.",
+      },
+    ],
+  },
+  "druid.circle-of-the-moon.combat-wild-shape": {
+    actions: [{ id: "druid.combat-wild-shape", name: "Cura in Forma Selvatica", timing: "bonus", outcome: { kind: "note" }, description: "In forma selvatica, spendi uno slot incantesimo: recuperi 1d8 PF per livello dello slot. La Forma Selvatica si usa come azione bonus." }],
+  },
+
+  /* ---------------- Monaco ---------------- */
+  "monk.martial-arts": {
+    effects: [{ type: "martialArts", die: MARTIAL_DIE }],
+    actions: [note("monk.martial-arts", "Colpo senz'armi bonus", "bonus", "Dopo l'azione di Attacco con un colpo senz'armi o un'arma da monaco.")],
+  },
+  "monk.flurry-of-blows": { actions: [note("monk.flurry-of-blows", "Raffica di Colpi", "bonus", "Due colpi senz'armi subito dopo l'azione di Attacco.", "monk.ki")] },
+  "monk.patient-defense": { actions: [note("monk.patient-defense", "Difesa Paziente", "bonus", "Azione di Schivata come azione bonus.", "monk.ki")] },
+  "monk.step-of-the-wind": { actions: [note("monk.step-of-the-wind", "Passo del Vento", "bonus", "Disimpegno o Scatto come azione bonus; la distanza di salto raddoppia per il turno.", "monk.ki")] },
+  "monk.deflect-missiles": {
+    actions: [{ id: "monk.deflect-missiles", name: "Deviare Proiettili", timing: "reaction", roll: { dice: "1d10", plus: { sum: [{ mod: "dex" }, { level: "monk" }] } }, outcome: { kind: "note" }, description: "Riduci di questo valore i danni di un attacco con arma a distanza. A 0 puoi afferrare il proiettile e rilanciarlo con 1 punto ki." }],
+  },
+  "monk.slow-fall": { actions: [note("monk.slow-fall", "Caduta Lenta", "reaction", "Riduci i danni da caduta di 5 volte il tuo livello da monaco.")] },
+  "monk.stunning-strike": { actions: [note("monk.stunning-strike", "Colpo Stordente", "special", "Quando colpisci con un'arma da mischia: tiro salvezza su Costituzione contro la CD del ki, o il bersaglio è stordito fino alla fine del tuo prossimo turno.", "monk.ki")] },
+  "monk.stillness-of-mind": { actions: [note("monk.stillness-of-mind", "Mente Lucida", "action", "Termini su di te un effetto che ti rende affascinato o spaventato.")] },
+  "monk.purity-of-body": { effects: [{ type: "grant", target: "immunity", values: ["poison"] }, { type: "grant", target: "conditionImmunity", values: ["poisoned"] }] },
+  "monk.empty-body": { actions: [{ id: "monk.empty-body", name: "Corpo Vuoto", timing: "action", cost: { resource: "monk.ki", amount: 4 }, outcome: { kind: "note" }, description: "Invisibile per 1 minuto, con resistenza a tutti i danni tranne quelli da forza." }] },
+  "monk.quickened-healing": {
+    actions: [{ id: "monk.quickened-healing", name: "Guarigione Rapida", timing: "action", cost: { resource: "monk.ki", amount: 2 }, roll: { dice: { sides: MARTIAL_DIE }, plus: { prof: 1 } }, outcome: { kind: "heal" } }],
+  },
+  "monk.way-of-the-open-hand.wholeness-of-body": { actions: [note("monk.wholeness-of-body", "Integrità del Corpo", "action", "Recuperi PF pari a tre volte il tuo livello da monaco.", "monk.wholeness-of-body")] },
+
+  /* ---------------- Paladino ---------------- */
+  "paladin.divine-sense": {
+    resources: [{ id: "paladin.divine-sense", name: "Percezione del Divino", max: { max: [1, { sum: [1, { mod: "cha" }] }] }, longRest: "all" }],
+    actions: [note("paladin.divine-sense", "Percezione del Divino", "action", "Fino alla fine del tuo prossimo turno conosci la posizione di celestiali, immondi e non morti entro 18 m non dietro copertura totale.", "paladin.divine-sense")],
+  },
+  "paladin.lay-on-hands": {
+    actions: [{ id: "paladin.lay-on-hands", name: "Imposizione delle Mani", timing: "action", cost: { resource: "paladin.lay-on-hands", amount: 1, variable: true }, outcome: { kind: "note" }, description: "Ripristini a una creatura toccata tanti PF quanti punti spendi. Con 5 punti curi una malattia o neutralizzi un veleno." }],
+  },
+  "paladin.divine-smite": { dice: [{ id: "paladin.divine-smite", name: "Punizione Divina", dice: "2d8", damageType: "radiant", note: "Con uno slot di 1°. +1d8 per ogni livello di slot in più (massimo 5d8) e +1d8 contro non morti e immondi" }] },
+  "paladin.improved-divine-smite": { effects: [{ type: "damageDice", on: "melee", dice: "1d8", damageType: "radiant", label: "Punizione Divina Migliorata" }] },
+  "paladin.aura-of-protection": { effects: [{ type: "bonus", target: "save.all", value: { max: [1, { mod: "cha" }] }, label: "Aura di Protezione" }] },
+  "paladin.aura-of-courage": { effects: [{ type: "grant", target: "conditionImmunity", values: ["frightened"] }] },
+  "paladin.cleansing-touch": {
+    resources: [{ id: "paladin.cleansing-touch", name: "Tocco Purificatore", max: { max: [1, { mod: "cha" }] }, longRest: "all" }],
+    actions: [note("paladin.cleansing-touch", "Tocco Purificatore", "action", "Termini un incantesimo su di te o su una creatura consenziente che tocchi.", "paladin.cleansing-touch")],
+  },
+  "paladin.harness-divine-power": {
+    actions: [
+      {
+        id: "paladin.harness-divine-power",
+        name: "Imbrigliare il Potere Divino",
+        timing: "bonus",
+        cost: { resource: "paladin.harness-divine-power", amount: 1 },
+        outcome: { kind: "recoverSlots", budget: halfUp({ prof: 1 }) },
+        description: "Recuperi uno slot speso. Spende anche un utilizzo di Incanalare Divinità: segnalo a mano.",
+      },
+    ],
+  },
+  "paladin.oath-of-devotion.channel-divinity-sacred-weapon": { actions: [note("paladin.sacred-weapon", "Arma Sacra", "action", "Per 1 minuto sommi il modificatore di Carisma ai tiri per colpire con un'arma, che emette luce e conta come magica.", PALADIN_CHANNEL)] },
+  "paladin.oath-of-devotion.channel-divinity-turn-the-unholy": { actions: [note("paladin.turn-the-unholy", "Scacciare gli Empi", "action", "Immondi e non morti entro 9 m: tiro salvezza su Saggezza o scacciati per 1 minuto.", PALADIN_CHANNEL)] },
+  "paladin.oath-of-vengeance.channel-divinity-abjure-enemy": { actions: [note("paladin.abjure-enemy", "Abiurare il Nemico", "action", "Una creatura entro 18 m: tiro salvezza su Saggezza o spaventata e con velocità 0 per 1 minuto.", PALADIN_CHANNEL)] },
+  "paladin.oath-of-vengeance.channel-divinity-vow-of-enmity": { actions: [note("paladin.vow-of-enmity", "Voto di Inimicizia", "bonus", "Vantaggio ai tiri per colpire contro una creatura entro 3 m, per 1 minuto.", PALADIN_CHANNEL)] },
+
+  /* ---------------- Ranger ---------------- */
+  "ranger.primeval-awareness": { actions: [{ id: "ranger.primeval-awareness", name: "Consapevolezza Primordiale", timing: "action", outcome: { kind: "note" }, description: "Spendi uno slot incantesimo: per 1 minuto per livello dello slot percepisci aberrazioni, celestiali, draghi, elementali, folletti, immondi e non morti entro 1,5 km." }] },
+  "ranger.vanish": { actions: [note("ranger.vanish", "Svanire", "bonus", "Azione di Nascondersi come azione bonus.")] },
+  "ranger.optional.hunters-prey-colossus-slayer": { dice: [{ id: "ranger.colossus-slayer", name: "Uccisore di Colossi", dice: "1d8", note: "Una volta per turno, contro una creatura sotto i suoi PF massimi" }] },
+  "ranger.optional.natures-veil-replaces-the-hide-in-plain-sight-feature": { actions: [note("ranger.natures-veil", "Velo della Natura", "bonus", "Invisibile fino all'inizio del tuo prossimo turno.", "ranger.natures-veil")] },
+  "ranger.optional.deft-explorer-replaces-the-natural-explorer-feature": {
+    actions: [{ id: "ranger.tireless", name: "Instancabile", timing: "action", cost: { resource: "ranger.tireless", amount: 1 }, roll: { dice: "1d8", plus: { max: [1, { mod: "wis" }] } }, outcome: { kind: "tempHp" }, when: { minLevel: { by: "ranger", level: 10 } } }],
+  },
+  "ranger.optional.favored-foe-replaces-the-favored-enemy-feature-and-works-with-the-foe-slayer-feature": {
+    resources: [{ id: "ranger.favored-foe", name: "Avversario Prescelto", max: { prof: 1 }, longRest: "all" }],
+    dice: [{ id: "ranger.favored-foe", name: "Avversario Prescelto", dice: { sides: at("ranger", { 1: 4, 6: 6, 14: 8 }) }, note: "Una volta per turno, contro il bersaglio marchiato" }],
+    actions: [note("ranger.favored-foe", "Marchia l'avversario", "free", "Quando colpisci: il bersaglio è il tuo avversario prescelto per 1 minuto (concentrazione).", "ranger.favored-foe")],
+  },
+
+  /* ---------------- Stregone ---------------- */
+  "sorcerer.font-of-magic": {
+    actions: [
+      { id: "sorcerer.create-slot", name: "Crea uno slot", timing: "bonus", outcome: { kind: "resourceToSlot", resource: "sorcerer.sorcery-points", costs: [2, 3, 5, 6, 7] }, description: "Spendi punti stregoneria: 2, 3, 5, 6 o 7 per uno slot dal 1° al 5°." },
+      { id: "sorcerer.convert-slot", name: "Converti uno slot", timing: "bonus", outcome: { kind: "slotToResource", resource: "sorcerer.sorcery-points" }, description: "Uno slot diventa punti stregoneria pari al suo livello." },
+    ],
+  },
+  "sorcerer.magical-guidance": { actions: [note("sorcerer.magical-guidance", "Guida Magica", "free", "Ritiri il d20 di una prova di caratteristica fallita.", "sorcerer.sorcery-points")] },
+  "sorcerer.draconic-bloodline.draconic-resilience": {
+    effects: [
+      { type: "bonus", target: "hp.max", value: { level: "sorcerer" }, label: "Resilienza Draconica" },
+      { type: "acFormula", value: { sum: [13, { mod: "dex" }] }, when: { armor: "none" }, label: "Resilienza Draconica" },
+    ],
+  },
+  "sorcerer.wild-magic.tides-of-chaos": { actions: [note("sorcerer.tides-of-chaos", "Maree del Caos", "free", "Vantaggio a un tiro per colpire, una prova o un tiro salvezza.", "sorcerer.tides-of-chaos")] },
+  "sorcerer.wild-magic.bend-luck": { actions: [{ id: "sorcerer.bend-luck", name: "Piegare la Fortuna", timing: "reaction", cost: { resource: "sorcerer.sorcery-points", amount: 2 }, roll: { dice: "1d4" }, outcome: { kind: "note" }, description: "Bonus o penalità al tiro di un'altra creatura che puoi vedere." }] },
+
+  /* ---------------- Warlock ---------------- */
+  "warlock.eldritch-master": { actions: [{ id: "warlock.eldritch-master", name: "Maestro dell'Occulto", timing: "special", cost: { resource: "warlock.eldritch-master", amount: 1 }, outcome: { kind: "recoverPact", fraction: 1 }, description: "1 minuto di supplica al patrono: recuperi tutti gli slot del Patto." }] },
+  "warlock.the-fiend.dark-ones-blessing": { actions: [note("warlock.dark-ones-blessing", "Benedizione dell'Oscuro", "free", "Quando riduci una creatura ostile a 0 PF: PF temporanei pari al modificatore di Carisma + il tuo livello da warlock (minimo 1).")] },
+  "warlock.the-fiend.dark-ones-own-luck": { actions: [{ id: "warlock.dark-ones-own-luck", name: "Fortuna dell'Oscuro", timing: "free", cost: { resource: "warlock.dark-ones-luck", amount: 1 }, roll: { dice: "1d10" }, outcome: { kind: "note" }, description: "Aggiungi il risultato a una prova di caratteristica o a un tiro salvezza." }] },
+  "warlock.the-fiend.hurl-through-hell": { actions: [{ id: "warlock.hurl-through-hell", name: "Scagliare all'Inferno", timing: "special", cost: { resource: "warlock.hurl-through-hell", amount: 1 }, roll: { dice: "10d10" }, outcome: { kind: "note" }, description: "Danni psichici a una creatura che hai colpito, se non è un immondo." }] },
+  "warlock.optional.hexblades-curse-hexblade": {
+    resources: [{ id: "warlock.hexblades-curse", name: "Maledizione della Lama del Sortilegio", max: 1, shortRest: "all", longRest: "all" }],
+    actions: [note("warlock.hexblades-curse", "Maledizione della Lama del Sortilegio", "bonus", "Una creatura entro 9 m per 1 minuto: bonus ai danni pari alla competenza, critico con 19-20, PF recuperati alla sua morte.", "warlock.hexblades-curse")],
+  },
+
+  /* ---------------- Artefice ---------------- */
+  "artificer.flash-of-genius": {
+    resources: [{ id: "artificer.flash-of-genius", name: "Lampo di Genio", max: { max: [1, { mod: "int" }] }, longRest: "all" }],
+    actions: [note("artificer.flash-of-genius", "Lampo di Genio", "reaction", "Sommi il modificatore di Intelligenza a una prova o a un tiro salvezza tuo o di una creatura entro 9 m.", "artificer.flash-of-genius")],
+  },
+  "artificer.artillerist.eldritch-cannon": { actions: [{ id: "artificer.eldritch-cannon", name: "Cannone Occulto", timing: "action", outcome: { kind: "note" }, description: "Crei un cannone (lanciafiamme, balista di forza o protettore). Una volta per riposo lungo, oppure spendendo uno slot incantesimo." }] },
+  "artificer.artillerist.arcane-firearm": { dice: [{ id: "artificer.arcane-firearm", name: "Arma da Fuoco Arcana", dice: "1d8", note: "A un tiro per i danni di un incantesimo da artefice lanciato con l'arma" }] },
+  "artificer.battle-smith.arcane-jolt": {
+    resources: [{ id: "artificer.arcane-jolt", name: "Scossa Arcana", max: { max: [1, { mod: "int" }] }, longRest: "all" }],
+    dice: [{ id: "artificer.arcane-jolt", name: "Scossa Arcana", dice: { count: at("artificer", { 9: 2, 15: 4 }), sides: 6 }, damageType: "force", note: "Danni da forza, oppure PF ripristinati a una creatura entro 9 m" }],
+  },
 };
 
 /**
@@ -162,6 +335,8 @@ function merge(f: Feature, m: Mechanics) {
   if (m.spells) f.spells = [...(f.spells ?? []), ...m.spells];
   if (m.actions) f.actions = mergeById(f.actions, m.actions);
   if (m.dice) f.dice = mergeById(f.dice, m.dice);
+  if (m.toggles) f.toggles = mergeById(f.toggles, m.toggles);
+  if (m.widgets) f.widgets = [...(f.widgets ?? []), ...m.widgets];
   if (m.choices) f.choices = mergeById(f.choices, m.choices);
   if (m.resources) {
     f.resources = mergeById(f.resources, m.resources);
@@ -198,6 +373,14 @@ export function applyMechanics(pack: ContentPack, mechanics: Record<string, Mech
     if (!list) continue;
     const spells = (pack.spells ?? []).filter((s) => s.lists.includes(list));
     first.spells = [...(first.spells ?? []), ...spells.map((s) => ({ spellId: s.id, minLevel: { by: sub.classId, level: Math.max(level(s.level), first.level ?? 1) } }))];
+    report.subclassSpells += spells.length;
+  }
+  // Circolo della Terra: il terreno è un'opzione, e i suoi incantesimi stanno nella lista "druid.<terreno>".
+  for (const feat of pack.feats ?? []) {
+    const land = feat.id.match(/^druid.optional.circle-of-the-land-(.+)$/)?.[1];
+    if (!land) continue;
+    const spells = (pack.spells ?? []).filter((s) => s.lists.includes(`druid.${land}`));
+    feat.feature.spells = spells.map((s) => ({ spellId: s.id, source: "druid", minLevel: { by: "druid", level: Math.max(3, 2 * s.level - 1) } }));
     report.subclassSpells += spells.length;
   }
   return report;

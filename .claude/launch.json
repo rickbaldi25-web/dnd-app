@@ -6,6 +6,12 @@
       "runtimeExecutable": "node",
       "runtimeArgs": ["apps/web/node_modules/vite/bin/vite.js", "apps/web", "--mode", "offline", "--port", "5199", "--strictPort"],
       "port": 5199
+    },
+    {
+      "name": "web-offline-2",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["apps/web/node_modules/vite/bin/vite.js", "apps/web", "--mode", "offline", "--port", "5198", "--strictPort"],
+      "port": 5198
     }
   ]
 }

@@ -326,3 +326,70 @@ describe.skipIf(!existsSync(OFFICIAL))("Compendio ufficiale 2014: meccaniche cod
     expect(useAction(spent, registry(), "wizard.arcane-recovery", undefined, { slots: { "1": 2, "2": 1 } }).lines.join(" ")).toMatch(/2 livelli/);
   });
 });
+
+describe.skipIf(!existsSync(OFFICIAL))("Compendio ufficiale 2014: meccaniche delle altre classi", () => {
+  let reg: ReturnType<typeof createRegistry>;
+  const registry = () => (reg ??= createRegistry(importCompendium(readFileSync(OFFICIAL, "utf8"), { id: "official-2014", name: "Ufficiali 2014" }).pack));
+  const hero = (classId: string, level: number, extra: Partial<CharacterData> = {}): CharacterData => {
+    const base = createCharacter({ id: "t", name: "Prova", speciesId: "human", backgroundId: "sage", classId, abilityScores: { str: 14, dex: 14, con: 14, int: 14, wis: 14, cha: 14 } }, registry());
+    return { ...base, levels: Array.from({ length: level }, () => ({ classId, hp: "avg" as const })), ...extra };
+  };
+  const state = (ch: CharacterData, patch: Partial<CharacterData["state"]>): CharacterData => ({ ...ch, state: { ...ch.state, ...patch } });
+
+  it("ogni classe si calcola dal 1° al 20° livello e ogni azione si può usare", () => {
+    for (const cls of registry().classes.values()) {
+      for (const level of [1, 2, 3, 5, 11, 20]) {
+        const ch = hero(cls.id, level);
+        const s = computeSheet(ch, registry());
+        for (const a of s.actions) expect(() => useAction(ch, registry(), a.id, undefined, { amount: 1, slotLevel: 1 }), `${cls.id} ${level}: ${a.id}`).not.toThrow();
+      }
+    }
+  });
+
+  it("Barbaro: l'Ira si attiva, dà danni e resistenze, e si spegne", () => {
+    const ch = hero("barbarian", 9);
+    const on = useAction(ch, registry(), "barbarian.rage");
+    expect(on.state.toggles.raging).toBe(true);
+    expect(on.state.resourcesSpent["barbarian.rage"]).toBe(1);
+    const raging = computeSheet(state(ch, on.state), registry());
+    expect(raging.resistances).toEqual(expect.arrayContaining(["bludgeoning", "piercing", "slashing"]));
+    expect(raging.advantages.map((a) => a.on)).toEqual(expect.arrayContaining(["save.str", "save.dex"]));
+    expect(computeSheet(ch, registry()).resistances).toEqual([]);
+    expect(useAction(state(ch, on.state), registry(), "barbarian.rage.end").state.toggles.raging).toBe(false);
+  });
+
+  it("Monaco: dado delle Arti Marziali e ki speso dalla Raffica di Colpi", () => {
+    const ch = hero("monk", 5);
+    const s = computeSheet(ch, registry());
+    expect(s.attacks.find((a) => a.unarmed)?.damage).toMatch(/^1d6/);
+    expect(useAction(ch, registry(), "monk.flurry-of-blows").state.resourcesSpent["monk.ki"]).toBe(1);
+  });
+
+  it("Bardo e Paladino: risorse legate al Carisma, aura ai tiri salvezza", () => {
+    expect(computeSheet(hero("bard", 5), registry()).resources.find((r) => r.id === "bard.bardic-inspiration")).toMatchObject({ max: 2 });
+    expect(computeSheet(hero("bard", 5), registry()).dice.find((d) => d.id === "bard.bardic-inspiration")).toMatchObject({ expr: "1d8" });
+    const pal = computeSheet(hero("paladin", 6), registry());
+    expect(pal.resources.find((r) => r.id === "paladin.divine-sense")).toMatchObject({ max: 3 });
+    expect(pal.saves.int.mod.value).toBe(2 + 2); // modificatore + Aura di Protezione
+  });
+
+  it("Stregone: punti stregoneria in slot e viceversa", () => {
+    const ch = hero("sorcerer", 5);
+    const made = useAction(ch, registry(), "sorcerer.create-slot", undefined, { slotLevel: 2 });
+    expect(made.state.resourcesSpent["sorcerer.sorcery-points"]).toBe(3);
+    expect(made.state.spellSlotsBonus).toMatchObject({ "2": 1 });
+    const back = useAction(state(ch, { resourcesSpent: { "sorcerer.sorcery-points": 4 } }), registry(), "sorcerer.convert-slot", undefined, { slotLevel: 3 });
+    expect(back.state.resourcesSpent["sorcerer.sorcery-points"]).toBe(1);
+  });
+
+  it("Warlock dell'Immondo: le azioni del patrono compaiono e si usano", () => {
+    const ch = hero("warlock", 3, { subclasses: { warlock: "warlock.the-fiend" } });
+    expect(useAction(ch, registry(), "warlock.dark-ones-blessing").lines.join(" ")).toMatch(/PF temporanei/);
+  });
+
+  it("Druido della Terra: gli incantesimi del terreno scelto sono sempre preparati", () => {
+    const ch = hero("druid", 5, { subclasses: { druid: "druid.circle-of-the-land" }, choices: { "druid.optional": ["druid.optional.circle-of-the-land-forest"] } });
+    const always = computeSheet(ch, registry()).spellcasting!.spells.filter((x) => x.always).map((x) => x.spellId);
+    expect(always).toEqual(expect.arrayContaining(["barkskin", "spider-climb", "call-lightning", "plant-growth"]));
+  });
+});
