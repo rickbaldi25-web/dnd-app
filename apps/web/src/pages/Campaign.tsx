@@ -6,6 +6,7 @@ import { HandoutsPanel } from "../components/Handouts";
 import { HomebrewPanel } from "../components/Homebrew";
 import { InitiativePanel } from "../components/Initiative";
 import { RollLog } from "../components/RollLog";
+import { SessionNotes } from "../components/SessionNotes";
 import { CONDITIONS, registry } from "../content";
 import { repo, type Campaign as CampaignData } from "../data";
 import { useAuth } from "../firebase/auth";
@@ -82,11 +83,23 @@ export function PartyCard({ ch, canEdit, mine, online, current = false }: { ch: 
           <span style={{ width: `${max ? Math.min(100, (s.hpCurrent / max) * 100) : 0}%` }} />
         </span>
       </div>
-      <p className="party-stats">
-        <span>CA {sheet.ac.value}</span>
-        <span>Percezione passiva {sheet.passivePerception}</span>
-        <span>Iniziativa {sheet.initiative.value >= 0 ? "+" : ""}{sheet.initiative.value}</span>
-      </p>
+      <dl className="party-stats">
+        <div>
+          <dt>CA</dt>
+          <dd>{sheet.ac.value}</dd>
+        </div>
+        <div>
+          <dt>Perc. passiva</dt>
+          <dd>{sheet.passivePerception}</dd>
+        </div>
+        <div>
+          <dt>Iniziativa</dt>
+          <dd>
+            {sheet.initiative.value >= 0 ? "+" : ""}
+            {sheet.initiative.value}
+          </dd>
+        </div>
+      </dl>
       {(s.conditions.length > 0 || s.exhaustion > 0 || sc?.concentration) && (
         <p className="party-tags">
           {s.conditions.map((c) =>
@@ -107,7 +120,7 @@ export function PartyCard({ ch, canEdit, mine, online, current = false }: { ch: 
       {slots.length > 0 && <p className="small">Slot: {slots.join(" · ")}</p>}
       {sheet.resources.length > 0 && <p className="small muted">{sheet.resources.map((r) => `${r.name} ${r.remaining}/${r.max}`).join(" · ")}</p>}
       {canEdit && (
-        <div className="row">
+        <div className="party-controls">
           <input type="number" min={0} value={amount} placeholder="PF" aria-label={`Punti ferita per ${ch.name}`} className="party-amount" onChange={(e) => setAmount(e.currentTarget.value)} />
           <button className="btn btn-danger" disabled={!n} onClick={() => act("damage")}>
             Danno
@@ -129,7 +142,7 @@ export function PartyCard({ ch, canEdit, mine, online, current = false }: { ch: 
         </div>
       )}
       {(canEdit || mine) && !current && (
-        <Link className="link-btn" to={`/c/${ch.id}`}>
+        <Link className="link-btn party-open" to={`/c/${ch.id}`}>
           Apri la scheda
         </Link>
       )}
@@ -193,7 +206,7 @@ export function Campaign() {
   };
 
   return (
-    <main className="page">
+    <main className="page campaign">
       <header className="sheet-head">
         <Link to="/campaigns" className="back" aria-label="Torna alle campagne">
           ‹
@@ -215,20 +228,22 @@ export function Campaign() {
                 Scheda di {ch.name}
               </Link>
             ))}
-          <span className="campaign-code" title="Codice da dare ai giocatori">
-            {campaign.id}
+          <span className="campaign-invite" title="Codice da dare ai giocatori">
+            <span className="muted small">Codice</span>
+            <span className="campaign-code">{campaign.id}</span>
+            <button className="btn" onClick={copy}>
+              {copied ? "Copiato" : "Copia"}
+            </button>
           </span>
-          <button className="btn" onClick={copy}>
-            {copied ? "Copiato" : "Copia codice"}
-          </button>
         </div>
       </header>
 
       {!isDm && campaign.automationLock && <p className="muted small">Il Master ha fissato l'automazione delle schede su: {AUTOMATION_LABEL[campaign.automationLock]}.</p>}
+      {/* Comandi del Master in un'unica barra */}
       {isDm && (
-        <div className="row campaign-tools">
+        <section className="panel campaign-toolbar" aria-label="Comandi del Master">
           <label className="small">
-            Automazione delle schede{" "}
+            <span className="muted">Automazione delle schede</span>
             <select
               value={campaign.automationLock ?? ""}
               onChange={(e) => repo.setAutomationLock(campaign.id, (e.currentTarget.value || null) as AutomationLevel | null).catch((err) => push({ title: "Salvataggio non riuscito", lines: [String(err?.message ?? err)], tone: "bad" }))}
@@ -239,17 +254,17 @@ export function Campaign() {
               <option value="full">Completa per tutti</option>
             </select>
           </label>
-        </div>
-      )}
-      {isDm && party.length > 0 && (
-        <div className="row campaign-tools">
-          <button className="btn" onClick={() => restAll("short")}>
-            Riposo breve per tutti
-          </button>
-          <button className="btn" onClick={() => restAll("long")}>
-            Riposo lungo per tutti
-          </button>
-        </div>
+          {party.length > 0 && (
+            <span className="campaign-rests">
+              <button className="btn" onClick={() => restAll("short")}>
+                Riposo breve per tutti
+              </button>
+              <button className="btn" onClick={() => restAll("long")}>
+                Riposo lungo per tutti
+              </button>
+            </span>
+          )}
+        </section>
       )}
 
       {party.length === 0 && (
@@ -260,19 +275,33 @@ export function Campaign() {
           </p>
         </section>
       )}
-      <InitiativePanel campaignId={campaign.id} party={party} isDm={isDm} uid={user.uid} />
+      {/* Al tavolo: a sinistra ciò che si gioca (iniziativa, gruppo), a destra ciò che si consulta */}
+      <div className="campaign-layout">
+        <div className="campaign-main">
+          <InitiativePanel campaignId={campaign.id} party={party} isDm={isDm} uid={user.uid} />
 
-      {isDm && <EncounterBuilder campaignId={campaign.id} party={party} />}
+          {party.length > 0 && (
+            <h2 className="section-title">
+              Gruppo <span className="muted small">{party.length} personaggi</span>
+            </h2>
+          )}
+          <ul className="party">
+            {party.map((ch) => (
+              <PartyCard key={ch.id} ch={ch} canEdit={isDm} mine={ch.ownerUid === user.uid} online={online.some((p) => p.uid === ch.ownerUid)} />
+            ))}
+          </ul>
 
-      <ul className="party">
-        {party.map((ch) => (
-          <PartyCard key={ch.id} ch={ch} canEdit={isDm} mine={ch.ownerUid === user.uid} online={online.some((p) => p.uid === ch.ownerUid)} />
-        ))}
-      </ul>
+          {isDm && <EncounterBuilder campaignId={campaign.id} party={party} />}
+        </div>
 
-      <HandoutsPanel campaignId={campaign.id} isDm={isDm} uid={user.uid} party={party} />
+        <aside className="campaign-aside">
+          <RollLog campaignId={campaign.id} isDm={isDm} />
 
-      <RollLog campaignId={campaign.id} isDm={isDm} />
+          <HandoutsPanel campaignId={campaign.id} isDm={isDm} uid={user.uid} party={party} />
+
+          <SessionNotes campaignId={campaign.id} isDm={isDm} />
+        </aside>
+      </div>
 
       <HomebrewPanel campaignId={campaign.id} homebrew={homebrew} isDm={isDm} />
 

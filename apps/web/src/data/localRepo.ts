@@ -1,5 +1,5 @@
 import { applyFieldChanges, diffFields, type CharacterData } from "@dnd/engine";
-import { newCampaignCode, type Campaign, type Encounter, type EncounterPlan, type Handout, type Homebrew, type MonsterSecret, type Presence, type SharedRoll, type Repository, type UserPrefs } from "./repository";
+import { newCampaignCode, type Campaign, type Encounter, type EncounterPlan, type Handout, type Homebrew, type MonsterSecret, type Presence, type SessionNote, type SharedRoll, type Repository, type UserPrefs } from "./repository";
 
 const KEY = "dnd.characters.v1";
 const PREFS = "dnd.prefs.v1";
@@ -9,7 +9,7 @@ const presences = new Map<string, Presence[]>();
 /** Tiri condivisi: in memoria, in modalità locale servono solo a provare il riquadro. */
 const sharedRolls = new Map<string, SharedRoll[]>();
 const ENCOUNTERS = "dnd.encounters.v1";
-type StoredEncounter = { encounter?: Encounter; secrets?: Record<string, MonsterSecret>; homebrew?: Homebrew; plans?: EncounterPlan[]; handouts?: Handout[] };
+type StoredEncounter = { encounter?: Encounter; secrets?: Record<string, MonsterSecret>; homebrew?: Homebrew; plans?: EncounterPlan[]; handouts?: Handout[]; sessions?: SessionNote[]; sessionSecrets?: Record<string, string> };
 
 function readEncounters(): Record<string, StoredEncounter> {
   try {
@@ -188,6 +188,28 @@ export const localRepo: Repository = {
   },
   async deleteHandout(campaignId, id) {
     writeEncounter(campaignId, { handouts: (readEncounters()[campaignId]?.handouts ?? []).filter((h) => h.id !== id) });
+  },
+  watchSessions(campaignId, cb) {
+    const emit = () => cb(readEncounters()[campaignId]?.sessions ?? []);
+    listeners.add(emit);
+    emit();
+    return () => listeners.delete(emit);
+  },
+  async saveSession(campaignId, session) {
+    const list = readEncounters()[campaignId]?.sessions ?? [];
+    writeEncounter(campaignId, { sessions: list.some((s) => s.id === session.id) ? list.map((s) => (s.id === session.id ? session : s)) : [...list, session] });
+  },
+  async deleteSession(campaignId, id) {
+    writeEncounter(campaignId, { sessions: (readEncounters()[campaignId]?.sessions ?? []).filter((s) => s.id !== id) });
+  },
+  watchSessionSecrets(campaignId, cb) {
+    const emit = () => cb(readEncounters()[campaignId]?.sessionSecrets ?? {});
+    listeners.add(emit);
+    emit();
+    return () => listeners.delete(emit);
+  },
+  async saveSessionSecrets(campaignId, notes) {
+    writeEncounter(campaignId, { sessionSecrets: notes });
   },
   watchHomebrew(campaignId, cb) {
     const emit = () => cb(readEncounters()[campaignId]?.homebrew ?? null);

@@ -21,7 +21,7 @@ import {
   writeBatch,
   type Firestore,
 } from "firebase/firestore";
-import { newCampaignCode, type Campaign, type Encounter, type EncounterPlan, type Handout, type Homebrew, type MonsterSecret, type Presence, type SharedRoll, type Repository, type UserPrefs } from "./repository";
+import { newCampaignCode, type Campaign, type Encounter, type EncounterPlan, type Handout, type Homebrew, type MonsterSecret, type Presence, type SessionNote, type SharedRoll, type Repository, type UserPrefs } from "./repository";
 
 /** Toglie i campi tecnici di Firestore prima di passare il personaggio al motore. */
 function toCharacter(id: string, data: Record<string, unknown>): CharacterData {
@@ -151,6 +151,22 @@ export function firestoreRepo(db: Firestore): Repository {
     },
     async deleteHandout(campaignId, id) {
       await deleteDoc(doc(db, "campaigns", campaignId, "handouts", id));
+    },
+    watchSessions(campaignId, cb) {
+      return onSnapshot(collection(db, "campaigns", campaignId, "sessions"), (snap) => cb(snap.docs.map((d) => ({ ...(d.data() as Omit<SessionNote, "id">), id: d.id }))), () => cb([]));
+    },
+    async saveSession(campaignId, session) {
+      const { id, ...data } = session;
+      await setDoc(doc(db, "campaigns", campaignId, "sessions", id), data);
+    },
+    async deleteSession(campaignId, id) {
+      await deleteDoc(doc(db, "campaigns", campaignId, "sessions", id));
+    },
+    watchSessionSecrets(campaignId, cb) {
+      return onSnapshot(doc(db, "campaigns", campaignId, "secret", "notes"), (d) => cb((d.data()?.bySession as Record<string, string>) ?? {}), () => cb({}));
+    },
+    async saveSessionSecrets(campaignId, notes) {
+      await setDoc(doc(db, "campaigns", campaignId, "secret", "notes"), { bySession: notes });
     },
     watchHomebrew(campaignId, cb) {
       return onSnapshot(doc(db, "campaigns", campaignId, "state", "homebrew"), (d) => cb(d.exists() ? { items: d.data().items ?? [], spells: d.data().spells ?? [] } : null), () => cb(null));

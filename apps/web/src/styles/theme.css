@@ -355,3 +355,318 @@ select option {
     padding-bottom: 8rem;
   }
 }
+
+/* ---------------- Barra in alto e menu ---------------- */
+
+.topbar {
+  gap: 0.75rem;
+}
+.brand {
+  white-space: nowrap;
+}
+/* su schermi larghi il contenitore del menu non esiste: collegamenti e utente stanno in riga nella barra */
+.topbar-menu {
+  display: contents;
+}
+.menu-btn {
+  display: none;
+}
+.topbar-links a {
+  font-weight: 700;
+}
+.app-foot {
+  padding: 0 16px 1.5rem;
+  text-align: center;
+  font-size: var(--step--1);
+}
+.app-foot a {
+  color: var(--muted);
+}
+
+@media (max-width: 699px) {
+  .topbar {
+    padding: 0.5rem 12px;
+  }
+  .menu-btn {
+    display: inline-grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 10px;
+  }
+  /* menu a scomparsa: un pannello sotto la barra, con voci grandi da toccare */
+  .topbar-menu {
+    display: none;
+    position: absolute;
+    top: 100%;
+    right: 0;
+    left: 0;
+    padding: 0.5rem 12px 0.9rem;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line-strong);
+    box-shadow: var(--shadow);
+  }
+  .topbar.is-open .topbar-menu {
+    display: grid;
+    gap: 0.6rem;
+  }
+  .topbar-links {
+    display: grid;
+    gap: 0;
+    margin: 0;
+  }
+  .topbar-links a {
+    display: flex;
+    align-items: center;
+    min-height: 48px;
+    padding: 0 0.75rem;
+    border: 0;
+    border-left: 3px solid transparent;
+    border-radius: 0 10px 10px 0;
+    font-size: var(--step-1);
+    color: var(--text);
+  }
+  .topbar-links a.active {
+    border-left-color: var(--copper);
+    background: var(--field);
+  }
+  .topbar-user {
+    flex-wrap: wrap;
+    gap: 0.6rem 0.9rem;
+    padding: 0.7rem 0.75rem 0;
+    border-top: 1px solid var(--line);
+  }
+  .topbar-user .theme-btn,
+  .topbar-user .link-btn {
+    min-height: 44px;
+  }
+  .topbar-name {
+    flex: 1;
+  }
+
+  /* contenuti: meno margini, intestazioni e pulsanti che non si accalcano */
+  .page {
+    padding: 0.75rem 12px 6rem;
+  }
+  .panel {
+    padding: 0.9rem 0.9rem;
+  }
+  .sheet-tools .btn {
+    flex: 1 1 auto;
+  }
+  .hp-controls {
+    grid-template-columns: minmax(4rem, 1fr) repeat(3, auto);
+  }
+  .attack-table th:nth-child(3),
+  .attack-table td:nth-child(3) {
+    font-size: var(--step--1);
+  }
+}
+
+/* ---------------- Campagna ---------------- */
+
+.section-title {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin: 0.25rem 0.25rem 0;
+  font-size: 0.82rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--heading);
+}
+.section-title .muted {
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.campaign-invite {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.25rem 0.25rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+.campaign-invite .campaign-code {
+  padding: 0;
+  border: 0;
+  font-variant-numeric: tabular-nums;
+}
+.campaign-invite .btn {
+  min-height: 36px;
+  padding: 0.2rem 0.7rem;
+}
+
+.campaign-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  padding-block: 0.75rem;
+}
+.campaign-toolbar label {
+  display: grid;
+  gap: 0.2rem;
+}
+.campaign-rests {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* due colonne dove c'è spazio: a sinistra si gioca, a destra si consulta */
+.campaign-layout {
+  display: grid;
+  gap: var(--gap);
+  margin-bottom: var(--gap);
+}
+.campaign-main,
+.campaign-aside {
+  display: grid;
+  gap: var(--gap);
+  align-content: start;
+  min-width: 0;
+}
+.campaign-main > *,
+.campaign-aside > * {
+  margin-bottom: 0;
+}
+.campaign-main > :empty {
+  display: none;
+}
+@media (min-width: 1000px) {
+  .campaign-layout {
+    grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr);
+    align-items: start;
+  }
+  .campaign-aside {
+    position: sticky;
+    top: 4.5rem;
+    max-height: calc(100dvh - 5.5rem);
+    overflow-y: auto;
+    padding-right: 2px;
+  }
+}
+
+/* Scheda di un personaggio del gruppo */
+.party-card {
+  display: grid;
+  gap: 0.6rem;
+  align-content: start;
+}
+.party-card p {
+  margin: 0;
+}
+.party-card .panel-head {
+  margin-bottom: 0;
+}
+.party-card .panel-head h2 {
+  font-size: 1rem;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  color: var(--text);
+}
+.party-card.is-open {
+  box-shadow: 0 0 0 1px var(--copper), var(--shadow);
+}
+.party-hp-number {
+  font-size: var(--step-3);
+  font-weight: 800;
+  line-height: 1;
+}
+.party-hp-number .muted {
+  font-size: var(--step-0);
+  font-weight: 500;
+}
+.party-bar {
+  height: 10px;
+  margin-top: 0.45rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--blood) 26%, transparent);
+}
+.party-bar span {
+  border-radius: 999px;
+}
+/* tre riquadri: il numero in grande, l'etichetta piccola sopra */
+.party-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.4rem;
+  margin: 0;
+}
+.party-stats div {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--field);
+}
+.party-stats dt {
+  font-size: 0.75rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.party-stats dd {
+  margin: 0;
+  font-size: var(--step-1);
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.tag {
+  padding: 0.15rem 0.6rem;
+  background: var(--field);
+  font-weight: 500;
+}
+.tag-bad {
+  background: color-mix(in srgb, var(--blood) 12%, transparent);
+}
+.tag-btn {
+  min-height: 32px;
+  background: color-mix(in srgb, var(--blood) 12%, transparent);
+}
+/* comandi del Master: PF su una riga, condizione sulla seguente */
+.party-controls {
+  display: grid;
+  grid-template-columns: minmax(3.5rem, 1fr) auto auto;
+  gap: 0.4rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--line);
+}
+.party-controls .party-amount {
+  width: 100%;
+  text-align: center;
+}
+.party-controls select {
+  grid-column: span 2;
+  min-width: 0;
+}
+.party-open {
+  justify-self: start;
+}
+
+/* Iniziativa e registro: righe più leggibili */
+.init-list li {
+  border-radius: 10px;
+  border-bottom: 0;
+  margin-bottom: 4px;
+  background: var(--field);
+}
+.init-list li.is-current {
+  background: color-mix(in srgb, var(--copper) 18%, var(--field));
+}
+.init-value,
+.roll-total {
+  font-weight: 800;
+}
+.turn-banner.is-mine {
+  box-shadow: 0 0 0 1px var(--copper), var(--shadow);
+}
+.stat-block {
+  border-radius: 12px;
+}

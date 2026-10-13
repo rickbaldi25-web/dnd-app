@@ -98,6 +98,12 @@ service cloud.firestore {
         allow write: if signedIn() && isDm(campaignId);
       }
 
+      // Note di sessione: il riassunto lo leggono i membri; gli appunti riservati del Master stanno in secret/notes.
+      match /sessions/{sessionId} {
+        allow read: if signedIn() && isMember(campaignId);
+        allow write: if signedIn() && isDm(campaignId);
+      }
+
       // Registro dei tiri: ognuno aggiunge i propri, tutti i membri li leggono, nessuno li modifica.
       match /rolls/{rollId} {
         allow read: if signedIn() && isMember(campaignId);

@@ -81,6 +81,17 @@ export interface Handout {
   revealedAt?: number;
 }
 
+/** Una sessione di gioco: il riassunto lo leggono tutti, gli appunti del Master stanno a parte. */
+export interface SessionNote {
+  id: string;
+  title: string;
+  /** Giorno della sessione, AAAA-MM-GG. */
+  date: string;
+  /** Riassunto per i giocatori. */
+  recap: string;
+  createdAt: number;
+}
+
 /** Oggetti e incantesimi propri della campagna, inseriti dal Master. */
 export interface Homebrew {
   items: ItemDef[];
@@ -163,6 +174,13 @@ export interface Repository {
   /** Solo il Master: crea o sostituisce. */
   saveHandout(campaignId: string, handout: Handout): Promise<void>;
   deleteHandout(campaignId: string, id: string): Promise<void>;
+  watchSessions(campaignId: string, cb: (list: SessionNote[]) => void): Unsubscribe;
+  /** Solo il Master: crea o sostituisce. */
+  saveSession(campaignId: string, session: SessionNote): Promise<void>;
+  deleteSession(campaignId: string, id: string): Promise<void>;
+  /** Solo il Master: i suoi appunti riservati, per id di sessione. */
+  watchSessionSecrets(campaignId: string, cb: (notes: Record<string, string>) => void): Unsubscribe;
+  saveSessionSecrets(campaignId: string, notes: Record<string, string>): Promise<void>;
   watchHomebrew(campaignId: string, cb: (h: Homebrew | null) => void): Unsubscribe;
   /** Solo il Master. */
   saveHomebrew(campaignId: string, homebrew: Homebrew): Promise<void>;

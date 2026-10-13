@@ -1,4 +1,5 @@
-import { BrowserRouter, NavLink, Route, Routes } from "react-router";
+import { useEffect, useState } from "react";
+import { BrowserRouter, Link, NavLink, Route, Routes, useLocation } from "react-router";
 import { ThemeSwitch } from "./components/ThemeSwitch";
 import { AuthProvider, useAuth } from "./firebase/auth";
 import { Campaign } from "./pages/Campaign";
@@ -12,33 +13,43 @@ import { LogProvider, LogStack } from "./state/log";
 
 function TopBar() {
   const { user, localMode, signOut } = useAuth();
+  const [open, setOpen] = useState(false);
+  const { pathname } = useLocation();
+  // su telefono il menu è a scomparsa: si richiude da solo quando cambi pagina
+  useEffect(() => setOpen(false), [pathname]);
   return (
-    <nav className="topbar">
+    <nav className={`topbar ${open ? "is-open" : ""}`}>
       <NavLink to="/" className="brand">
         <img src="/logo.png" alt="" className="brand-mark" />
         Brock's DnD
       </NavLink>
-      <span className="topbar-links">
-        <NavLink to="/" end>
-          Personaggi
-        </NavLink>
-        <NavLink to="/campaigns">Campagne</NavLink>
-        <NavLink to="/crediti">Crediti</NavLink>
-      </span>
-      <span className="topbar-user">
-        <ThemeSwitch />
-        {localMode ? (
-          <span className="muted small" title="Senza Firebase: i dati restano in questo browser">Modalità locale</span>
-        ) : (
-          <>
-            {user?.photoUrl && <img src={user.photoUrl} alt="" className="avatar" referrerPolicy="no-referrer" />}
-            <span className="small">{user?.name}</span>
-            <button className="link-btn" onClick={signOut}>
-              Esci
-            </button>
-          </>
-        )}
-      </span>
+      <button className="icon-btn menu-btn" aria-label={open ? "Chiudi il menu" : "Apri il menu"} aria-expanded={open} aria-controls="topbar-menu" onClick={() => setOpen(!open)}>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+          {open ? <path d="M6 6l12 12M18 6L6 18" /> : <path d="M4 7h16M4 12h16M4 17h16" />}
+        </svg>
+      </button>
+      <div className="topbar-menu" id="topbar-menu">
+        <span className="topbar-links">
+          <NavLink to="/" end>
+            Personaggi
+          </NavLink>
+          <NavLink to="/campaigns">Campagne</NavLink>
+        </span>
+        <span className="topbar-user">
+          <ThemeSwitch />
+          {localMode ? (
+            <span className="muted small" title="Senza Firebase: i dati restano in questo browser">Modalità locale</span>
+          ) : (
+            <>
+              {user?.photoUrl && <img src={user.photoUrl} alt="" className="avatar" referrerPolicy="no-referrer" />}
+              <span className="small topbar-name">{user?.name}</span>
+              <button className="link-btn" onClick={signOut}>
+                Esci
+              </button>
+            </>
+          )}
+        </span>
+      </div>
     </nav>
   );
 }
@@ -72,6 +83,9 @@ function Shell() {
         <Route path="/campaigns/:id" element={<Campaign />} />
         <Route path="*" element={<Characters />} />
       </Routes>
+      <footer className="app-foot">
+        <Link to="/crediti">Crediti e licenze</Link>
+      </footer>
       <LogStack />
     </>
   );
