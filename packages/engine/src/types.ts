@@ -238,6 +238,8 @@ export interface WidgetRef {
 export interface Feature {
   id: string;
   name: string;
+  /** Nome originale inglese, quando il nome è tradotto. */
+  nameEn?: string;
   /** Manuale e pagina da cui viene, es. "Player's Handbook p. 72". */
   source?: string;
   level?: number; // livello di classe a cui si ottiene (per classi/sottoclassi)
@@ -365,6 +367,8 @@ export interface ProficiencySet {
 export interface ClassDef {
   id: string;
   name: string;
+  /** Nome originale inglese, quando il nome è tradotto. */
+  nameEn?: string;
   hitDie: Die;
   primaryAbility: Ability[]; // per il multiclasse: basta una (es. Guerriero: str O dex)
   /** Per il multiclasse servono tutte (es. Monaco: Des E Sag). */
@@ -384,6 +388,8 @@ export interface SubclassDef {
   id: string;
   classId: string;
   name: string;
+  /** Nome originale inglese, quando il nome è tradotto. */
+  nameEn?: string;
   description?: string;
   source?: string;
   /** Per le sottoclassi che danno incantesimi a una classe che non ne ha. */
@@ -394,6 +400,8 @@ export interface SubclassDef {
 export interface SpeciesDef {
   id: string;
   name: string;
+  /** Nome originale inglese, quando il nome è tradotto. */
+  nameEn?: string;
   description?: string;
   source?: string;
   size: string; // "Small", "Medium", "Small or Medium"...
@@ -404,6 +412,8 @@ export interface SpeciesDef {
 export interface BackgroundDef {
   id: string;
   name: string;
+  /** Nome originale inglese, quando il nome è tradotto. */
+  nameEn?: string;
   /** Regole 2024: le tre caratteristiche che il background può aumentare. */
   abilities?: [Ability, Ability, Ability];
   /** Regole 2024: talento d'origine. */
@@ -420,6 +430,8 @@ export interface BackgroundDef {
 export interface FeatDef {
   id: string;
   name: string;
+  /** Nome originale inglese, quando il nome è tradotto. */
+  nameEn?: string;
   /** "option" = opzioni di classe che non sono talenti (Metamagia, Suppliche Occulte...), distinte dal tag. */
   category: "origin" | "general" | "fighting-style" | "epic-boon" | "option";
   /** Prerequisito a parole, quando non è codificato in prerequisites. */
@@ -438,6 +450,8 @@ export interface FeatDef {
 
 /** Campi comuni a tutti gli oggetti, tutti facoltativi. */
 export interface ItemInfo {
+  /** Nome originale inglese, quando il nome è tradotto. */
+  nameEn?: string;
   description?: string;
   /** Peso in libbre e valore in monete d'oro. */
   weight?: number;

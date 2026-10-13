@@ -4,18 +4,30 @@
  *
  *   node packages/importer/scripts/import.mjs "manuali/Official Only.xml" official-2014 "Manuali ufficiali 2014"
  *
+ * Dopo l'importazione applica le traduzioni di packages/content-private/translations/it/
+ * (formato in src/translate.ts): dopo averle modificate basta rilanciare questo script.
+ *
  * Serve Node 24 o più recente, che esegue il TypeScript direttamente.
  */
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { importCompendium } from "../src/fc5.ts";
+import { applyTranslations, parseTranslations } from "../src/translate.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const [file = "manuali/Official Only.xml", id = "official-2014", name = "Manuali ufficiali 2014"] = process.argv.slice(2);
 const outDir = resolve(root, "packages/content-private/generated");
+// Traduzioni scritte a mano: tutti i .txt della cartella, in ordine alfabetico.
+const translationsDir = resolve(root, "packages/content-private/translations/it");
 
 const { pack, stats } = importCompendium(readFileSync(resolve(root, file), "utf8"), { id, name, ruleset: "2014" });
+const translationFiles = existsSync(translationsDir) ? readdirSync(translationsDir).filter((f) => f.endsWith(".txt")).sort() : [];
+const translated = applyTranslations(
+  pack,
+  translationFiles.flatMap((f) => parseTranslations(readFileSync(resolve(translationsDir, f), "utf8"), f)),
+);
+stats.translations = translated;
 mkdirSync(outDir, { recursive: true });
 
 // Un file per tipo: l'app carica i mostri solo quando servono al Master.
@@ -36,3 +48,6 @@ for (const [cls, subs] of Object.entries(stats.subclasses)) console.log(`  ${cls
 const unmapped = Object.entries(stats.unmappedModifiers).sort((a, b) => b[1] - a[1]);
 console.log(`Modificatori da codificare a mano: ${unmapped.reduce((a, [, v]) => a + v, 0)} (${unmapped.length} tipi)`);
 for (const w of stats.warnings) console.log("Attenzione:", w);
+const applied = Object.entries(translated.applied).map(([k, v]) => `${k} ${v}`).join(", ");
+console.log(`Traduzioni: ${applied || "nessuna"} (${translationFiles.length} file)`);
+for (const m of translated.missing) console.log("Attenzione: traduzione senza voce corrispondente:", m);
