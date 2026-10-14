@@ -18,14 +18,17 @@ import { applyTranslations, parseTranslations } from "../src/translate.ts";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const [file = "manuali/Official Only.xml", id = "official-2014", name = "Manuali ufficiali 2014"] = process.argv.slice(2);
 const outDir = resolve(root, "packages/content-private/generated");
-// Traduzioni scritte a mano: tutti i .txt della cartella, in ordine alfabetico.
-const translationsDir = resolve(root, "packages/content-private/translations/it");
+// Traduzioni: prima quelle ricavate dall'SRD italiano (scripts/srd-it.mjs), poi quelle scritte a mano,
+// che così hanno la precedenza. In ogni cartella tutti i .txt, in ordine alfabetico.
+const translationDirs = ["translations/it-srd", "translations/it"].map((d) => resolve(root, "packages/content-private", d));
 
 const { pack, stats } = importCompendium(readFileSync(resolve(root, file), "utf8"), { id, name, ruleset: "2014" });
-const translationFiles = existsSync(translationsDir) ? readdirSync(translationsDir).filter((f) => f.endsWith(".txt")).sort() : [];
+const translationFiles = translationDirs.flatMap((dir) =>
+  existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".txt")).sort().map((f) => resolve(dir, f)) : [],
+);
 const translated = applyTranslations(
   pack,
-  translationFiles.flatMap((f) => parseTranslations(readFileSync(resolve(translationsDir, f), "utf8"), f)),
+  translationFiles.flatMap((f) => parseTranslations(readFileSync(f, "utf8"), f)),
 );
 stats.translations = translated;
 mkdirSync(outDir, { recursive: true });

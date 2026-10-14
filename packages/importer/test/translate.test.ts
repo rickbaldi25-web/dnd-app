@@ -76,6 +76,45 @@ describe("traduzioni", () => {
     expect(report.applied).toEqual({ class: 1, feature: 1, resource: 1, subclass: 1, feat: 1 });
     expect(report.missing).toEqual(["feature knight.nope"]);
   });
+
+  it("negli incantesimi separa il paragrafo dei livelli superiori", () => {
+    const p: ContentPack = { id: "t", name: "t", spells: [{ id: "zap", name: "Zap", level: 1, school: "evocation", lists: [], description: "Zap.", higherLevels: "More zap." }] };
+    applyTranslations(p, parseTranslations("@@ spell zap | Scossa\nUna scossa.\n**Ai livelli superiori.** Più scossa."));
+    expect(p.spells![0]).toMatchObject({ name: "Scossa", nameEn: "Zap", description: "Una scossa.", higherLevels: "Più scossa." });
+  });
+
+  it("nei mostri traduce i dati e le voci riconosciute dal nome inglese", () => {
+    const p: ContentPack = {
+      id: "t",
+      name: "t",
+      monsters: [
+        {
+          id: "goblin",
+          name: "Goblin",
+          size: "Small",
+          type: "humanoid",
+          ac: 15,
+          hp: 7,
+          speed: "30 ft.",
+          abilities: { str: 8, dex: 14, con: 10, int: 10, wis: 8, cha: 8 },
+          cr: "1/4",
+          traits: [{ name: "Nimble Escape", text: "Disengage or Hide." }],
+          actions: [
+            { name: "Scimitar", text: "Melee.", attack: { bonus: 4, damage: "1d6+2" } },
+            { name: "Shortbow", text: "Ranged." },
+          ],
+        },
+      ],
+    };
+    const text = "@@ monster goblin | Goblin\ntaglia: Piccolo\nvelocità: 9 m\n@ Scimitar | Scimitarra\nMischia.\n@ Nimble Escape | Fuga agile\n@ Missing | Niente\nIgnorato.";
+    expect(applyTranslations(p, parseTranslations(text)).missing).toEqual([]);
+    const m = p.monsters![0]!;
+    expect([m.size, m.type, m.speed]).toEqual(["Piccolo", "humanoid", "9 m"]);
+    // Voce con il testo, voce con il solo nome, voce non tradotta: l'attacco pronto resta.
+    expect(m.actions[0]).toEqual({ name: "Scimitarra", text: "Mischia.", attack: { bonus: 4, damage: "1d6+2" } });
+    expect(m.traits[0]).toEqual({ name: "Fuga agile", text: "Disengage or Hide." });
+    expect(m.actions[1]!.name).toBe("Shortbow");
+  });
 });
 
 /* File veri: solo sul computer che ha i manuali e le traduzioni. */
@@ -87,10 +126,11 @@ const dir = resolve(root, "packages/content-private/translations/it");
 describe.skipIf(!existsSync(xml) || !existsSync(dir))("traduzioni dei manuali ufficiali", () => {
   it("ogni voce tradotta esiste e le classi sono in italiano fino al 3° livello", () => {
     const { pack } = importCompendium(readFileSync(xml, "utf8"), { id: "official-2014", name: "Manuali ufficiali 2014", ruleset: "2014" });
-    const files = readdirSync(dir).filter((f) => f.endsWith(".txt"));
+    // Come lo script di importazione: prima le voci ricavate dall'SRD, poi quelle scritte a mano.
+    const files = [resolve(dir, "../it-srd"), dir].flatMap((d) => (existsSync(d) ? readdirSync(d).filter((f) => f.endsWith(".txt")).map((f) => resolve(d, f)) : []));
     const report = applyTranslations(
       pack,
-      files.flatMap((f) => parseTranslations(readFileSync(resolve(dir, f), "utf8"), f)),
+      files.flatMap((f) => parseTranslations(readFileSync(f, "utf8"), f)),
     );
     expect(report.missing).toEqual([]);
     const untranslated = pack.classes!.flatMap((c) => [

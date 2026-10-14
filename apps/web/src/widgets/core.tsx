@@ -19,6 +19,7 @@ import {
 import { createContext, useContext, useEffect, useState } from "react";
 import { ABILITY_NAMES, CONDITIONS, DAMAGE_TYPES, SENSES, TIMING, ftToM, isHomebrew, itemName, registry } from "../content";
 import { COINS, ItemSearch } from "../components/ItemSearch";
+import { RichText } from "../components/RichText";
 import { giveTo } from "../components/Loot";
 import { useLog } from "../state/log";
 import type { CharacterController } from "../state/useCharacter";
@@ -707,7 +708,7 @@ export function FeaturesWidget({ c }: WidgetProps) {
             <summary>
               <span>{f.name}</span> <span className="muted small">{f.source}</span>
             </summary>
-            {f.description && <p>{f.description}</p>}
+            {f.description && <RichText text={f.description} />}
           </details>
         ))}
       </div>

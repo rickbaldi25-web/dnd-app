@@ -1,6 +1,7 @@
 import { ABILITIES, featsByTag } from "@dnd/engine";
 import { useState } from "react";
 import { optionLabel, registry } from "../content";
+import { RichText } from "./RichText";
 import type { CharacterController } from "../state/useCharacter";
 
 type Pending = CharacterController["sheet"]["pendingChoices"][number];
@@ -110,7 +111,7 @@ function ChoiceRow({ c, p }: { c: CharacterController; p: Pending }) {
           Azzera
         </button>
       )}
-      {description && <p className="muted small choice-description">{description}</p>}
+      {description && <RichText className="muted small choice-description" text={description} />}
       <button className="btn btn-primary" disabled={picked.length !== need} onClick={save}>
         Conferma
       </button>

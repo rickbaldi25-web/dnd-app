@@ -11,6 +11,7 @@ import {
   type SpellSelection,
 } from "@dnd/engine";
 import { useState } from "react";
+import { RichText } from "../components/RichText";
 import { ABILITY_NAMES, registry } from "../content";
 import type { CharacterController } from "../state/useCharacter";
 import { Panel } from "./core";
@@ -72,12 +73,8 @@ function SpellText({ spell }: { spell: SpellDef }) {
       <p className="muted small">
         {[spell.castingTime, spell.range, spell.components, spell.duration].filter(Boolean).join(" · ")}
       </p>
-      <p className="spell-text">{spell.description}</p>
-      {spell.higherLevels && (
-        <p className="spell-text">
-          <strong>A livelli superiori.</strong> {spell.higherLevels}
-        </p>
-      )}
+      <RichText className="spell-text" text={spell.description} />
+      {spell.higherLevels && <RichText className="spell-text" text={`**A livelli superiori.** ${spell.higherLevels}`} />}
     </>
   );
 }

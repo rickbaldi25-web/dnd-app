@@ -966,7 +966,8 @@ body:has(.sheet.is-raging) {
   justify-content: space-between;
   gap: 0.75rem;
 }
-.feature-list p {
+.feature-list p,
+.feature-list li {
   max-width: 72ch;
   color: var(--muted);
 }
