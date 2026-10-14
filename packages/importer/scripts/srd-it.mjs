@@ -17,7 +17,18 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { importCompendium } from "../src/fc5.ts";
-import { CLASS_FEATURES_IT, CLASS_ORDER_IT, EQUIPMENT_IT, MAGIC_IT, MAGIC_IT_BROKEN, SECTION_APPEND, SILVERED_PREFIX, VARIANT_IT } from "./srd-it-names.mjs";
+import {
+  CLASS_FEATURES_IT,
+  CLASS_ORDER_IT,
+  EQUIPMENT_IT,
+  MAGIC_IT,
+  MAGIC_IT_BROKEN,
+  SECTION_APPEND,
+  SILVERED_PREFIX,
+  SPECIES_IT,
+  SPECIES_SKIP,
+  VARIANT_IT,
+} from "./srd-it-names.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const report = process.argv.includes("--report");
@@ -268,13 +279,18 @@ const itSpells = parseItSpells();
 const spells = matchSpells(itSpells);
 const spellByName = spellsByName();
 const entries = new Map();
-for (const { it, en } of spells.pairs) entries.set(en.id, { kind: "spell", id: en.id, name: it.name, description: trustworthy(it, en) ? it.description : undefined });
+/** I dati dell'incantesimo in testa al testo: li legge applyTranslations (src/translate.ts). */
+function withMeta(it) {
+  const meta = [["Tempo di lancio", it.castingTime], ["Gittata", it.range], ["Componenti", it.components], ["Durata", it.duration]];
+  return [...meta.filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`), it.description].join("\n");
+}
+for (const { it, en } of spells.pairs) entries.set(en.id, { kind: "spell", id: en.id, name: it.name, description: trustworthy(it, en) ? withMeta(it) : undefined });
 for (const [itName, enName] of Object.entries(SPELL_ALIASES)) {
   const en = spellByName.get(norm(enName));
   if (!en) console.log("Attenzione: incantesimo inglese non trovato:", enName);
   else if (!entries.has(en.id)) {
     const it = spells.unmatched.find((s) => s.name === itName);
-    entries.set(en.id, { kind: "spell", id: en.id, name: itName, description: it && trustworthy(it, en) ? it.description : undefined });
+    entries.set(en.id, { kind: "spell", id: en.id, name: itName, description: it && trustworthy(it, en) ? withMeta(it) : undefined });
   }
 }
 const spellEntries = [...entries.values()].sort((a, b) => a.name.localeCompare(b.name, "it"));
@@ -520,6 +536,27 @@ for (let round = 0; round < 3; round++) for (const { it, en } of monsters.pairs)
   }
 }
 const monsterEntries = monsters.pairs.map(({ it, en }) => monsterEntry(it, en)).sort((a, b) => a.name.localeCompare(b.name, "it"));
+
+/**
+ * Dizionario dei nomi delle voci dei mostri (inglese → italiano), dalle coppie trovate nell'SRD più i nomi delle
+ * armi: lo usa l'importazione (src/localize.ts) per i mostri dei supplementi. Per ogni nome vince la traduzione più usata.
+ */
+function entryNameDictionary() {
+  const votes = new Map();
+  for (const e of monsterEntries)
+    for (const [, en, it] of e.description.matchAll(/^@ (.+?) \| (.+)$/gm)) {
+      const k = baseName(en);
+      const v = it.replace(/\s*\(.*\)\s*$/, "").trim();
+      if (!v || v === "Azioni leggendarie") continue;
+      const m = votes.get(k) ?? new Map();
+      votes.set(k, m.set(v, (m.get(v) ?? 0) + 1));
+    }
+  const out = {};
+  for (const x of pack.items) if (!x.magic && EQUIPMENT_IT[x.id] && ["weapon"].includes(x.kind)) out[x.name.toLowerCase()] = EQUIPMENT_IT[x.id];
+  for (const [k, m] of votes) out[k] = [...m].sort((a, b) => b[1] - a[1])[0][0];
+  return out;
+}
+writeFileSync(resolve(outDir, "voci-mostri.json"), JSON.stringify(entryNameDictionary(), null, 1));
 write("mostri.txt", monsterEntries);
 const sum = (k) => monsterEntries.reduce((a, e) => a + e[k], 0);
 console.log(`Mostri: ${monsterEntries.length} tradotti su ${itMonsters.length} letti dall'SRD italiano; voci con il testo ${sum("translated")} su ${sum("total")}`);
@@ -708,10 +745,18 @@ function classFeatureEntries() {
       }
     }
     let current;
+    const used = new Set();
     const flush = () => {
       if (!current) return;
       const text = current.parts.join("\n").trim();
       for (const id of current.ids) {
+        // "feat:..." è un'opzione (una supplica, uno stile): si traduce come talento.
+        if (id.startsWith("feat:")) {
+          const featId = id.slice(5);
+          if (pack.feats.some((x) => x.id === featId)) out.push({ kind: "feat", id: featId, name: current.name, description: text });
+          else missing.push(featId);
+          continue;
+        }
         const f = byId.get(id);
         if (f) out.push({ kind: "feature", id, name: current.name, description: text });
         else missing.push(id);
@@ -720,10 +765,17 @@ function classFeatureEntries() {
     };
     heads.forEach((h, n) => {
       const body = paragraphs(LINES.slice(h.body, heads[n + 1]?.line ?? end)).join("\n");
-      const target = map.get(h.key);
+      // Un titolo già usato ("Suppliche Occulte" compare due volte) non riapre il privilegio.
+      const target = used.has(h.key) ? undefined : map.get(h.key);
+      if (target) used.add(h.key);
       if (target) {
         flush();
-        const ids = target === "asi" ? [...byId.keys()].filter((id) => id.startsWith(`${cls}.ability-score-improvement`)) : [`${cls}.${target}`];
+        const ids =
+          target === "asi"
+            ? [...byId.keys()].filter((id) => id.startsWith(`${cls}.ability-score-improvement`))
+            : target.startsWith("feat:")
+              ? [target]
+              : [`${cls}.${target}`];
         current = { name: h.title.replace(/\s+/g, " "), ids, parts: [body] };
       } else if (current && append.has(h.key)) current.parts.push(`**${h.title.replace(/\s+/g, " ")}.** ${body}`);
       else flush();
@@ -738,3 +790,68 @@ const classFeatures = classFeatureEntries();
 write("privilegi.txt", classFeatures.entries);
 console.log(`Privilegi di classe: ${classFeatures.entries.length} tradotti dall'SRD italiano`);
 for (const m of classFeatures.missing) console.log("Attenzione: privilegio non trovato:", m);
+
+/* ------------------------------------------------------------------ */
+/* Specie, background e talento                                        */
+/* ------------------------------------------------------------------ */
+
+function speciesEntries() {
+  const end = LINES.indexOf("Privilegi di classe");
+  // L'inizio di ogni blocco: la prima riga uguale al titolo, dopo la precedente.
+  let cursor = LINES.indexOf("Tratti razziali");
+  const blocks = SPECIES_IT.map((b) => {
+    const line = LINES.indexOf(b.heading, cursor + 1);
+    cursor = line;
+    return { ...b, line };
+  });
+  const allHeads = [...new Set([...SPECIES_IT.flatMap((b) => Object.keys(b.traits)), ...SPECIES_SKIP])];
+  const headOf = (l) => allHeads.find((h) => l === `${h}.` || l.startsWith(`${h}. `));
+  const out = [];
+  const missing = [];
+  blocks.forEach((b, k) => {
+    const stop = blocks[k + 1]?.line ?? end;
+    const ids = b.ids ?? pack.species.filter((s) => s.id.startsWith(b.prefix)).map((s) => s.id);
+    // Il nome va alla voce principale (la prima elencata, o quella uguale al prefisso): le varianti restano distinte.
+    if (b.name) for (const id of b.ids ? [b.ids[0]] : ids.filter((id) => id === b.prefix)) out.push({ kind: "species", id, name: b.name });
+    // Tratti: dal titoletto fino al successivo titoletto noto o alla fine del blocco.
+    const found = [];
+    for (let i = b.line + 1; i < stop; i++) {
+      const h = headOf(LINES[i]);
+      if (h) found.push({ h, line: i });
+    }
+    found.forEach((f, n) => {
+      const suffix = b.traits[f.h];
+      if (!suffix) return;
+      const first = LINES[f.line].slice(f.h.length + 1).trim();
+      const text = paragraphs([first, ...LINES.slice(f.line + 1, found[n + 1]?.line ?? stop)].filter(Boolean)).join("\n");
+      let hit = 0;
+      for (const id of ids) {
+        const fid = `${id}.${suffix}`;
+        if (pack.species.find((s) => s.id === id)?.features.some((x) => x.id === fid)) out.push({ kind: "feature", id: fid, name: f.h, description: text }), hit++;
+      }
+      if (!hit) missing.push(`${b.heading}: ${f.h}`);
+    });
+    for (const h of Object.keys(b.traits)) if (!found.some((f) => f.h === h)) missing.push(`${b.heading}: titoletto "${h}" non trovato`);
+  });
+  return { entries: out, missing };
+}
+
+/** Accolito: solo nome e privilegio, perché il testo inglese del background serve a leggere l'equipaggiamento iniziale. */
+function backgroundEntries() {
+  const start = LINES.indexOf("Accolito");
+  const priv = LINES.indexOf("Privilegio: Rifugio dei Fedeli", start);
+  const stop = LINES.indexOf("Caratteristiche suggerite", priv);
+  const out = [{ kind: "background", id: "acolyte", name: "Accolito" }];
+  if (priv > 0 && stop > priv)
+    out.push({ kind: "feature", id: "bg.acolyte.feature-shelter-of-the-faithful", name: "Privilegio: Rifugio dei Fedeli", description: paragraphs(LINES.slice(priv + 1, stop)).join("\n") });
+  const feat = LINES.indexOf("Lottatore");
+  const featEnd = LINES.indexOf("Usare i punteggi", feat);
+  if (feat > 0 && featEnd > feat) out.push({ kind: "feat", id: "grappler", name: "Lottatore", description: paragraphs(LINES.slice(feat + 2, featEnd)).join("\n") });
+  return out;
+}
+
+const species = speciesEntries();
+const origins = backgroundEntries();
+write("specie-background-talenti.txt", [...species.entries, ...origins]);
+console.log(`Specie: ${species.entries.length} voci; background e talenti: ${origins.length} voci`);
+for (const m of species.missing) console.log("Attenzione: tratto di specie non trovato:", m);

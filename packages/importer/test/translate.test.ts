@@ -78,9 +78,9 @@ describe("traduzioni", () => {
   });
 
   it("negli incantesimi separa il paragrafo dei livelli superiori", () => {
-    const p: ContentPack = { id: "t", name: "t", spells: [{ id: "zap", name: "Zap", level: 1, school: "evocation", lists: [], description: "Zap.", higherLevels: "More zap." }] };
-    applyTranslations(p, parseTranslations("@@ spell zap | Scossa\nUna scossa.\n**Ai livelli superiori.** Più scossa."));
-    expect(p.spells![0]).toMatchObject({ name: "Scossa", nameEn: "Zap", description: "Una scossa.", higherLevels: "Più scossa." });
+    const p: ContentPack = { id: "t", name: "t", spells: [{ id: "zap", name: "Zap", level: 1, school: "evocation", castingTime: "1 action", range: "60 feet", components: "V", duration: "Instantaneous", lists: [], description: "Zap.", higherLevels: "More zap." }] };
+    applyTranslations(p, parseTranslations("@@ spell zap | Scossa\nGittata: 18 metri\nDurata: Istantanea\nUna scossa.\n**Ai livelli superiori.** Più scossa."));
+    expect(p.spells![0]).toMatchObject({ name: "Scossa", nameEn: "Zap", range: "18 metri", duration: "Istantanea", description: "Una scossa.", higherLevels: "Più scossa." });
   });
 
   it("nei mostri traduce i dati e le voci riconosciute dal nome inglese", () => {

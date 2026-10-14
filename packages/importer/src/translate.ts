@@ -16,6 +16,9 @@
  *
  * L'intestazione è "@@ tipo id | Nome". Senza testo sotto, cambia solo il nome.
  *
+ * Negli incantesimi le prime righe possono dare i dati ("Tempo di lancio: 1 azione", "Gittata:", "Componenti:",
+ * "Durata:") e il paragrafo "**Ai livelli superiori.** ..." finisce nel suo campo.
+ *
  * Per i mostri il testo ha una forma sua: prima i dati ("campo: valore", campi in MONSTER_FIELDS),
  * poi le voci, ognuna introdotta dal nome inglese che sostituisce e seguita dal testo (se manca resta l'inglese):
  *
@@ -133,7 +136,18 @@ function translateMonster(m: MonsterDef & { nameEn?: string }, t: Translation) {
 
 /** In un incantesimo il paragrafo "**Ai livelli superiori.** ..." del testo tradotto va nel suo campo, come nell'originale. */
 function splitHigherLevels(spell: Named & { higherLevels?: string }) {
-  const m = /\n?\*\*Ai? livelli superiori\.\*\*\s*([\s\S]*)$/.exec(spell.description ?? "");
+  // Righe iniziali con i dati: "Tempo di lancio: 1 azione", "Gittata: 18 metri"...
+  const meta = { "tempo di lancio": "castingTime", gittata: "range", componenti: "components", durata: "duration" } as const;
+  const lines = (spell.description ?? "").split("\n");
+  while (lines.length) {
+    const m = /^([^:]+):\s*(.+)$/.exec(lines[0]!);
+    const key = m && meta[m[1]!.trim().toLowerCase() as keyof typeof meta];
+    if (!key) break;
+    (spell as unknown as Record<string, string>)[key] = m[2]!.trim();
+    lines.shift();
+  }
+  spell.description = lines.join("\n").trim();
+  const m =/\n?\*\*Ai? livelli superiori\.\*\*\s*([\s\S]*)$/.exec(spell.description ?? "");
   if (!m) return;
   spell.description = spell.description!.slice(0, m.index).trim();
   spell.higherLevels = m[1]!.trim();

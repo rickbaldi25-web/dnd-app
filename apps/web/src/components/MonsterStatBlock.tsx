@@ -1,5 +1,5 @@
 import { ABILITIES, formatMod, roll, rollD20, type MonsterDef, type MonsterEntry } from "@dnd/engine";
-import { ABILITY_NAMES } from "../content";
+import { ABILITY_NAMES, skillName } from "../content";
 import { useLog } from "../state/log";
 
 const mod = (score: number) => Math.floor((score - 10) / 2);
@@ -47,7 +47,7 @@ export function MonsterStatBlock({ monster: m, name }: { monster: MonsterDef; na
   };
   const facts: [string, string | undefined][] = [
     ["Tiri salvezza", m.saves && Object.entries(m.saves).map(([a, v]) => `${ABILITY_NAMES[a as keyof typeof ABILITY_NAMES].short} ${formatMod(v ?? 0)}`).join(", ")],
-    ["Abilità", m.skills && Object.entries(m.skills).map(([s, v]) => `${s} ${formatMod(v)}`).join(", ")],
+    ["Abilità", m.skills && Object.entries(m.skills).map(([s, v]) => `${skillName(s)} ${formatMod(v)}`).join(", ")],
     ["Vulnerabilità", m.vulnerabilities],
     ["Resistenze", m.resistances],
     ["Immunità", m.immunities],
@@ -59,7 +59,8 @@ export function MonsterStatBlock({ monster: m, name }: { monster: MonsterDef; na
   return (
     <div className="stat-block">
       <p className="muted small">
-        {[m.size, m.type, m.alignment].filter(Boolean).join(", ")}
+        {/* Come nel manuale: "Aberrazione Grande, legale malvagio". */}
+        {[[m.type.replace(/^\p{Ll}/u, (c) => c.toUpperCase()), m.size].filter(Boolean).join(" "), m.alignment].filter(Boolean).join(", ")}
         {m.source ? ` · ${m.source}` : ""}
       </p>
       <p>

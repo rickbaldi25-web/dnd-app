@@ -3,3 +3,4 @@ export * from "./mechanics.ts";
 export * from "./translate.ts";
 export * from "./xml.ts";
 export * from "./campaign.ts";
+export * from "./localize.ts";

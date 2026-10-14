@@ -13,6 +13,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { importCompendium } from "../src/fc5.ts";
+import { localizePack } from "../src/localize.ts";
 import { applyTranslations, parseTranslations } from "../src/translate.ts";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -31,6 +32,9 @@ const translated = applyTranslations(
   translationFiles.flatMap((f) => parseTranslations(readFileSync(f, "utf8"), f)),
 );
 stats.translations = translated;
+// Italiano automatico per le parti formulari delle voci rimaste in inglese (src/localize.ts).
+const entryNamesFile = resolve(root, "packages/content-private/translations/it-srd/voci-mostri.json");
+localizePack(pack, existsSync(entryNamesFile) ? JSON.parse(readFileSync(entryNamesFile, "utf8")) : {});
 mkdirSync(outDir, { recursive: true });
 
 // Un file per tipo: l'app carica i mostri solo quando servono al Master.

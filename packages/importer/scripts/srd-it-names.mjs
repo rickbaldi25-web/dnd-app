@@ -848,6 +848,39 @@ export const CLASS_FEATURES_IT = {
     "Fortuna dell'Oscuro": "the-fiend.dark-ones-own-luck",
     "Resilienza Immonda": "the-fiend.fiendish-resilience",
     "Scagliare all'inferno": "the-fiend.hurl-through-hell",
+    // Le suppliche occulte sono opzioni (talenti): "feat:" + id del talento.
+    "Armatura delle ombre": "feat:warlock.eldritch-invocations.armor-of-shadows",
+    "Balzo ultraterreno": "feat:warlock.eldritch-invocations.otherworldly-leap",
+    "Catene di Carceri": "feat:warlock.eldritch-invocations.chains-of-carceri",
+    "Deflagrazione agonizzante": "feat:warlock.eldritch-invocations.agonizing-blast",
+    "Deflagrazione respingente": "feat:warlock.eldritch-invocations.repelling-blast",
+    "Fardello mentale": "feat:warlock.eldritch-invocations.mire-the-mind",
+    "Influenza seducente": "feat:warlock.eldritch-invocations.beguiling-influence",
+    "Ladro dei cinque fati": "feat:warlock.eldritch-invocations.thief-of-five-fates",
+    "Lama assetata": "feat:warlock.eldritch-invocations.thirsting-blade",
+    "Lancia occulta": "feat:warlock.eldritch-invocations.eldritch-spear",
+    "Libro degli antichi segreti": "feat:warlock.eldritch-invocations.book-of-ancient-secrets",
+    "Lingue delle bestie": "feat:warlock.eldritch-invocations.beast-speech",
+    "Maestro di mille forme": "feat:warlock.eldritch-invocations.master-of-myriad-forms",
+    "Maschera dei molti volti": "feat:warlock.eldritch-invocations.mask-of-many-faces",
+    "Occhi del custode delle rune": "feat:warlock.eldritch-invocations.eyes-of-the-rune-keeper",
+    "Parola temibile": "feat:warlock.eldritch-invocations.dreadful-word",
+    "Passo ascendente": "feat:warlock.eldritch-invocations.ascendant-step",
+    "Presagio di sventura": "feat:warlock.eldritch-invocations.sign-of-ill-omen",
+    "Scultore della carne": "feat:warlock.eldritch-invocations.sculptor-of-flesh",
+    "Servitori del caos": "feat:warlock.eldritch-invocations.minions-of-chaos",
+    "Sguardo delle due menti": "feat:warlock.eldritch-invocations.gaze-of-two-minds",
+    Succhiavita: "feat:warlock.eldritch-invocations.lifedrinker",
+    "Sussurri dalla tomba": "feat:warlock.eldritch-invocations.whispers-of-the-grave",
+    "Sussurri stregati": "feat:warlock.eldritch-invocations.bewitching-whispers",
+    "Tutt'uno con le ombre": "feat:warlock.eldritch-invocations.one-with-shadows",
+    "Vigore immondo": "feat:warlock.eldritch-invocations.fiendish-vigor",
+    "Visione dei reami lontani": "feat:warlock.eldritch-invocations.visions-of-distant-realms",
+    "Visioni velate": "feat:warlock.eldritch-invocations.misty-visions",
+    "Vista del diavolo": "feat:warlock.eldritch-invocations.devils-sight",
+    "Vista dell'occulto": "feat:warlock.eldritch-invocations.eldritch-sight",
+    "Vista stregata": "feat:warlock.eldritch-invocations.witch-sight",
+    "Voce del Signore delle Catene": "feat:warlock.eldritch-invocations.voice-of-the-chain-master",
   },
 };
 
@@ -883,3 +916,43 @@ export const SECTION_APPEND = [
   "patto della lama",
   "patto del tomo",
 ];
+
+/**
+ * Specie dell'SRD 5.1 italiano, nell'ordine del manuale. Il compendio fonde specie e sottospecie ("Dwarf, Hill"),
+ * quindi i tratti della specie valgono per tutte le voci con quel prefisso ("dwarf-"), quelli della sottospecie
+ * solo per le voci elencate. "Tratto italiano" → id del tratto importato (senza il prefisso della specie).
+ */
+export const SPECIES_IT = [
+  { heading: "Elfo", prefix: "elf-", traits: { Scurovisione: "darkvision", "Sensi acuti": "keen-senses", "Retaggio fatato": "fey-ancestry", Trance: "trance", Linguaggi: "languages" } },
+  { heading: "Elfo alto", ids: ["elf-high"], name: "Elfo alto", traits: { "Addestramento nelle armi elfiche": "elf-weapon-training", Trucchetto: "cantrip" } },
+  { heading: "Halfling", prefix: "halfling-", traits: { Fortunato: "lucky", Coraggioso: "brave", "Agilità halfling": "halfling-nimbleness", Linguaggi: "languages" } },
+  { heading: "Piedelesto", ids: ["halfling-lightfoot"], name: "Halfling piedelesto", traits: { "Furtività innata": "naturally-stealthy" } },
+  {
+    heading: "Nano",
+    prefix: "dwarf-",
+    traits: {
+      Scurovisione: "darkvision",
+      "Resilienza nanica": "dwarven-resilience",
+      "Addestramento da combattimento nanico": "dwarven-combat-training",
+      "Competenza negli strumenti": "tool-proficiency",
+      "Esperto minatore": "stonecunning",
+      Linguaggi: "languages",
+    },
+  },
+  { heading: "Nano delle colline", ids: ["dwarf-hill"], name: "Nano delle colline", traits: { "Robustezza nanica": "dwarven-toughness" } },
+  { heading: "Umano", ids: ["human", "human-variant"], name: "Umano", traits: { Linguaggi: "languages" } },
+  { heading: "Dragonide", prefix: "dragonborn", name: "Dragonide", traits: { "Discendenza draconica": "draconic-ancestry", Soffio: "breath-weapon", "Resistenza ai danni": "damage-resistance", Linguaggi: "languages" } },
+  { heading: "Gnomo", prefix: "gnome-", traits: { Scurovisione: "darkvision", "Astuzia gnomesca": "gnome-cunning", Linguaggi: "languages" } },
+  { heading: "Gnomo delle rocce", ids: ["gnome-rock"], name: "Gnomo delle rocce", traits: { "Conoscenze dell'artefice": "artificers-lore", Inventore: "tinker" } },
+  { heading: "Mezzelfo", prefix: "half-elf", name: "Mezzelfo", traits: { Scurovisione: "darkvision", "Retaggio fatato": "fey-ancestry", "Versatilità nelle abilità": "skill-versatility", Linguaggi: "languages" } },
+  {
+    heading: "Mezzorco",
+    prefix: "half-orc",
+    name: "Mezzorco",
+    traits: { Scurovisione: "darkvision", Minaccioso: "menacing", "Resistenza implacabile": "relentless-endurance", "Attacchi selvaggi": "savage-attacks", Linguaggi: "languages" },
+  },
+  { heading: "Tiefling", prefix: "tiefling", name: "Tiefling", traits: { Scurovisione: "darkvision", "Resistenza infernale": "hellish-resistance", "Eredità infernale": "infernal-legacy", Linguaggi: "languages" } },
+];
+
+/** Titoletti dei tratti che non hanno una voce nel compendio (stanno nei dati della specie): chiudono il tratto precedente. */
+export const SPECIES_SKIP = ["Incremento dei punteggi di caratteristica", "Allineamento", "Età", "Taglia", "Velocità", "Linguaggio extra", "Sottorazze", "Tratti"];
