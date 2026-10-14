@@ -17,6 +17,7 @@ import { repo, type Campaign as CampaignData } from "../data";
 import { useAuth } from "../firebase/auth";
 import { useLog, useShareRolls } from "../state/log";
 import { useHomebrew } from "../state/homebrew";
+import { exportCampaign, restoreCampaign } from "../state/backup";
 import { useCampaignNews } from "../state/news";
 import { usePresence } from "../state/presence";
 
@@ -245,6 +246,44 @@ export function Campaign() {
                 <option value="full">Completa per tutti</option>
               </select>
             </label>
+            <label className="small">
+              <span className="muted">Salire di livello</span>
+              <select value={campaign.progression ?? "xp"} onChange={(e) => repo.setProgression(campaign.id, e.currentTarget.value as "xp" | "milestone").catch((err) => push({ title: "Salvataggio non riuscito", lines: [String(err?.message ?? err)], tone: "bad" }))}>
+                <option value="xp">Con i punti esperienza</option>
+                <option value="milestone">A pietre miliari</option>
+              </select>
+            </label>
+          </section>
+        )}
+
+        {isDm && (
+          <section className="panel backup">
+            <h2>Copia di sicurezza</h2>
+            <p className="muted small">Scarica in un file ciò che hai preparato: incontri, avventura, diario con i tuoi appunti, handout, contenuti e bottino. Ripristinandolo nella campagna aperta, incontri, avventura, contenuti e bottino si sostituiscono; sessioni e handout si aggiungono. Giocatori e personaggi non si toccano: ognuno scarica i suoi dalla pagina Personaggi.</p>
+            <div className="row">
+              <button className="btn" onClick={() => exportCampaign(campaign.id, campaign.name, user.uid).catch((e) => push({ title: "Copia non riuscita", lines: [String(e?.message ?? e)], tone: "bad" }))}>
+                Scarica la campagna
+              </button>
+              <label className="btn">
+                Ripristina da un file
+                <input
+                  type="file"
+                  accept=".json,application/json"
+                  hidden
+                  onChange={async (e) => {
+                    const file = e.currentTarget.files?.[0];
+                    e.currentTarget.value = "";
+                    if (!file || !window.confirm(`Ripristinare «${file.name}» in ${campaign.name}? Incontri, avventura, contenuti e bottino attuali vengono sostituiti.`)) return;
+                    try {
+                      const data = await restoreCampaign(campaign.id, await file.text());
+                      push({ title: `Ripristinata la copia di «${data.name}»`, lines: [`${data.plans.length} incontri, ${data.sessions.length} sessioni, ${data.handouts.length} handout`], rolls: [], tone: "good" });
+                    } catch (err) {
+                      push({ title: "Ripristino non riuscito", lines: [String(err instanceof Error ? err.message : err)], tone: "bad" });
+                    }
+                  }}
+                />
+              </label>
+            </div>
           </section>
         )}
 
@@ -282,9 +321,13 @@ export function Campaign() {
           <button
             className="btn btn-danger-quiet"
             onClick={async () => {
-              if (!window.confirm(`Eliminare la campagna ${campaign.name}? I personaggi restano ai giocatori.`)) return;
-              await repo.deleteCampaign(campaign.id);
-              nav("/campaigns");
+              if (!window.confirm(`Eliminare la campagna ${campaign.name}? Si cancellano anche diario, handout, incontri, avventura e bottino. I personaggi restano ai giocatori.`)) return;
+              try {
+                await repo.deleteCampaign(campaign.id);
+                nav("/campaigns");
+              } catch (e) {
+                push({ title: "Eliminazione non riuscita", lines: [String(e instanceof Error ? e.message : e)], tone: "bad" });
+              }
             }}
           >
             Elimina campagna

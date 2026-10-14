@@ -135,6 +135,23 @@ export const localRepo: Repository = {
     const all = readCampaigns();
     delete all[id];
     writeCampaigns(all);
+    // Via anche combattimento, incontri, handout, sessioni e avventura della campagna.
+    const stored = readEncounters();
+    delete stored[id];
+    try {
+      localStorage.setItem(ENCOUNTERS, JSON.stringify(stored));
+    } catch {
+      /* storage bloccato */
+    }
+    sharedRolls.delete(id);
+    presences.delete(id);
+    notify();
+  },
+  async setProgression(id, progression) {
+    const all = readCampaigns();
+    if (!all[id]) return;
+    all[id].progression = progression;
+    writeCampaigns(all);
   },
   async setAutomationLock(id, level) {
     const all = readCampaigns();
@@ -284,6 +301,12 @@ export const localRepo: Repository = {
     emit();
     return () => listeners.delete(emit);
   },
+  // In modalità locale c'è un dispositivo solo: ciò che si è visto sta già nel browser.
+  watchSeen(_uid, _campaignId, cb) {
+    cb({});
+    return () => undefined;
+  },
+  async saveSeen() {},
   async getPrefs() {
     try {
       return JSON.parse(localStorage.getItem(PREFS) ?? "{}") as UserPrefs;

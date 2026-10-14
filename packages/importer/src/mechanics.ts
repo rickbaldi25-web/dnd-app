@@ -9,6 +9,7 @@
  * così, quando non c'è una voce con l'id esatto (es. gli stili di combattimento, uguali per più classi).
  */
 import type { ActionDef, Condition, ContentPack, Feature, Value } from "@dnd/engine";
+import { SUBCLASS_MECHANICS } from "./subclasses/index.ts";
 
 type Mechanics = Pick<Feature, "effects" | "actions" | "resources" | "choices" | "dice" | "spells" | "toggles" | "widgets">;
 
@@ -37,7 +38,7 @@ const ALL_SKILLS = [
   "medicine", "nature", "perception", "performance", "persuasion", "religion", "sleight-of-hand", "stealth", "survival",
 ];
 
-export const MECHANICS: Record<string, Mechanics> = {
+const BASE: Record<string, Mechanics> = {
   /* ---------------- Comuni a più classi ---------------- */
   "*.extra-attack": { effects: [{ type: "extraAttack", attacks: 2 }] },
   "*.fighting-style.archery": { effects: [{ type: "bonus", target: "attack.ranged", value: 2, label: "Stile: Tiro" }] },
@@ -290,10 +291,6 @@ export const MECHANICS: Record<string, Mechanics> = {
   "warlock.the-fiend.dark-ones-blessing": { actions: [note("warlock.dark-ones-blessing", "Benedizione dell'Oscuro", "free", "Quando riduci una creatura ostile a 0 PF: PF temporanei pari al modificatore di Carisma + il tuo livello da warlock (minimo 1).")] },
   "warlock.the-fiend.dark-ones-own-luck": { actions: [{ id: "warlock.dark-ones-own-luck", name: "Fortuna dell'Oscuro", timing: "free", cost: { resource: "warlock.dark-ones-luck", amount: 1 }, roll: { dice: "1d10" }, outcome: { kind: "note" }, description: "Aggiungi il risultato a una prova di caratteristica o a un tiro salvezza." }] },
   "warlock.the-fiend.hurl-through-hell": { actions: [{ id: "warlock.hurl-through-hell", name: "Scagliare all'Inferno", timing: "special", cost: { resource: "warlock.hurl-through-hell", amount: 1 }, roll: { dice: "10d10" }, outcome: { kind: "note" }, description: "Danni psichici a una creatura che hai colpito, se non è un immondo." }] },
-  "warlock.optional.hexblades-curse-hexblade": {
-    resources: [{ id: "warlock.hexblades-curse", name: "Maledizione della Lama del Sortilegio", max: 1, shortRest: "all", longRest: "all" }],
-    actions: [note("warlock.hexblades-curse", "Maledizione della Lama del Sortilegio", "bonus", "Una creatura entro 9 m per 1 minuto: bonus ai danni pari alla competenza, critico con 19-20, PF recuperati alla sua morte.", "warlock.hexblades-curse")],
-  },
 
   /* ---------------- Artefice ---------------- */
   "artificer.flash-of-genius": {
@@ -307,6 +304,9 @@ export const MECHANICS: Record<string, Mechanics> = {
     dice: [{ id: "artificer.arcane-jolt", name: "Scossa Arcana", dice: { count: at("artificer", { 9: 2, 15: 4 }), sides: 6 }, damageType: "force", note: "Danni da forza, oppure PF ripristinati a una creatura entro 9 m" }],
   },
 };
+
+/** Tutte le meccaniche: quelle di base qui sopra e quelle delle sottoclassi, un file per classe. */
+export const MECHANICS: Record<string, Mechanics> = { ...BASE, ...SUBCLASS_MECHANICS };
 
 /**
  * Incantesimi sempre preparati delle sottoclassi. Il compendio li elenca come liste
@@ -336,6 +336,8 @@ function merge(f: Feature, m: Mechanics) {
   if (m.actions) f.actions = mergeById(f.actions, m.actions);
   if (m.dice) f.dice = mergeById(f.dice, m.dice);
   if (m.toggles) f.toggles = mergeById(f.toggles, m.toggles);
+  // Ogni stato attivabile ha il suo interruttore nella scheda: è lì che si accende e si spegne.
+  for (const t of m.toggles ?? []) if (!f.widgets?.some((w) => w.widget === "toggle" && w.ref === t.id)) f.widgets = [...(f.widgets ?? []), { widget: "toggle", ref: t.id }];
   if (m.widgets) f.widgets = [...(f.widgets ?? []), ...m.widgets];
   if (m.choices) f.choices = mergeById(f.choices, m.choices);
   if (m.resources) {

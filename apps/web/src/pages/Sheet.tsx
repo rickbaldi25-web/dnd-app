@@ -1,4 +1,4 @@
-import type { WidgetRef } from "@dnd/engine";
+import { levelForXp, type WidgetRef } from "@dnd/engine";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { AutomationSwitch } from "../components/AutomationSwitch";
@@ -6,6 +6,7 @@ import { Badge, CampaignDrawer, useCampaignSide } from "../components/CampaignSi
 import { ChoicesPanel } from "../components/ChoicesPanel";
 import { TurnBanner, useEncounter } from "../components/Initiative";
 import { LevelUpDialog } from "../components/LevelUpDialog";
+import { XpBar } from "../components/XpBar";
 import { ProposalDialog } from "../components/ProposalDialog";
 import { registry } from "../content";
 import { repo } from "../data";
@@ -145,7 +146,7 @@ export function Sheet() {
                 {!sideOpen && <Badge n={news.handouts + news.diary} />}
               </button>
             )}
-            <button className="btn" onClick={() => setLvlOpen(true)} disabled={sheet.level >= 20}>
+            <button className={`btn ${!c.milestone && levelForXp(ch.xp ?? 0) > sheet.level ? "btn-primary" : ""}`} onClick={() => setLvlOpen(true)} disabled={sheet.level >= 20}>
               Sali di livello
             </button>
             {c.automation !== "full" && (
@@ -202,6 +203,7 @@ export function Sheet() {
             }
           />
         )}
+        {!combat && !c.milestone && <XpBar c={c} onLevelUp={() => setLvlOpen(true)} />}
         {!combat && <ChoicesPanel c={c} />}
         {warnings.length > 0 && (
           <ul className="problems">

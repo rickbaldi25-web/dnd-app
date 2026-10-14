@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { repo, type Handout, type SessionNote } from "../data";
+import { useAuth } from "../firebase/auth";
 import { useLog } from "./log";
 
 /*
@@ -17,16 +18,28 @@ export function readSeen(kind: Kind, campaignId: string): Record<string, string 
     return {};
   }
 }
-export function markSeen(kind: Kind, campaignId: string, id: string, value: string | number) {
+function writeSeen(kind: Kind, campaignId: string, entries: Record<string, string | number>) {
   try {
-    localStorage.setItem(key(kind, campaignId), JSON.stringify({ ...readSeen(kind, campaignId), [id]: value }));
+    localStorage.setItem(key(kind, campaignId), JSON.stringify({ ...readSeen(kind, campaignId), ...entries }));
   } catch {
     /* storage bloccato: resta segnato solo per questa visita */
   }
   window.dispatchEvent(new Event(SEEN_EVENT));
 }
-/** Si aggiorna quando qualcosa viene segnato come visto, anche da un altro riquadro della pagina. */
+
+/** Utente collegato, per salvare ciò che ha visto anche online. Lo imposta useSeen. */
+let seenUid: string | undefined;
+
+/** Segna come visto, su questo dispositivo e (se collegati) su tutti gli altri. */
+export function markSeen(kind: Kind, campaignId: string, id: string, value: string | number) {
+  writeSeen(kind, campaignId, { [id]: value });
+  if (seenUid) repo.saveSeen(seenUid, campaignId, kind, { [id]: value }).catch(() => undefined);
+}
+
+/** Si aggiorna quando qualcosa viene segnato come visto, anche da un altro riquadro o da un altro dispositivo. */
 export function useSeen(kind: Kind, campaignId: string): Record<string, string | number> {
+  const { user } = useAuth();
+  const uid = user?.uid;
   const [seen, setSeen] = useState(() => readSeen(kind, campaignId));
   useEffect(() => {
     const refresh = () => setSeen(readSeen(kind, campaignId));
@@ -34,6 +47,16 @@ export function useSeen(kind: Kind, campaignId: string): Record<string, string |
     window.addEventListener(SEEN_EVENT, refresh);
     return () => window.removeEventListener(SEEN_EVENT, refresh);
   }, [kind, campaignId]);
+  // Ciò che si è visto altrove arriva qui e si unisce a quello di questo browser.
+  useEffect(() => {
+    seenUid = uid;
+    if (!uid || !campaignId) return;
+    return repo.watchSeen(uid, campaignId, (remote) => {
+      const mine = remote[kind] ?? {};
+      const local = readSeen(kind, campaignId);
+      if (Object.entries(mine).some(([id, v]) => local[id] !== v)) writeSeen(kind, campaignId, mine);
+    });
+  }, [uid, kind, campaignId]);
   return seen;
 }
 

@@ -27,6 +27,8 @@ export interface CharacterController {
   automationLocked: boolean;
   /** Master della campagna del personaggio, se ne ha una. */
   campaignDmUid?: string;
+  /** La campagna sale di livello a pietre miliari: niente PE sulla scheda. */
+  milestone: boolean;
   /** Modifica diretta (input dell'utente): si salva sempre. */
   update: (fn: (ch: CharacterData) => CharacterData) => void;
   /** Esito calcolato dal motore: applicato, proposto o solo mostrato secondo l'automazione. */
@@ -69,13 +71,16 @@ export function useCharacter(id: string) {
   const campaignId = ch?.campaignId;
   const [campaignLock, setCampaignLock] = useState<AutomationLevel | undefined>();
   const [campaignDmUid, setCampaignDmUid] = useState<string | undefined>();
+  const [milestone, setMilestone] = useState(false);
   useEffect(() => {
     setCampaignLock(undefined);
     setCampaignDmUid(undefined);
+    setMilestone(false);
     return campaignId
       ? repo.watchCampaign(campaignId, (c) => {
           setCampaignLock(c?.automationLock);
           setCampaignDmUid(c?.dmUid);
+          setMilestone(c?.progression === "milestone");
         })
       : undefined;
   }, [campaignId]);
@@ -149,7 +154,7 @@ export function useCharacter(id: string) {
 
   const controller: CharacterController | null =
     resolved && sheet
-      ? { ch: resolved, ownAutomation: ch?.settings.automation, sheet, automation, automationLocked: !!campaignLock, campaignDmUid, update, act, pending, confirm, cancel }
+      ? { ch: resolved, ownAutomation: ch?.settings.automation, sheet, automation, automationLocked: !!campaignLock, campaignDmUid, milestone, update, act, pending, confirm, cancel }
       : null;
 
   return { loading: ch === undefined, missing: ch === null, broken: !!ch && !sheet, controller };

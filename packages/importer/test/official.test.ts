@@ -346,6 +346,21 @@ describe.skipIf(!existsSync(OFFICIAL))("Compendio ufficiale 2014: meccaniche del
     }
   });
 
+  it("ogni sottoclasse si calcola e ogni sua azione si può usare", () => {
+    for (const sub of registry().subclasses.values()) {
+      for (const level of [3, 11, 20]) {
+        const ch = hero(sub.classId, level, { subclasses: { [sub.classId]: sub.id } });
+        const s = computeSheet(ch, registry());
+        for (const a of s.actions) expect(() => useAction(ch, registry(), a.id, undefined, { amount: 1, slotLevel: 1 }), `${sub.id} ${level}: ${a.id}`).not.toThrow();
+      }
+    }
+  });
+
+  it("ogni meccanica scritta a mano trova il suo privilegio", () => {
+    const { stats } = importCompendium(readFileSync(OFFICIAL, "utf8"), { id: "official-2014", name: "Ufficiali 2014" });
+    expect(stats.mechanics?.missing).toEqual([]);
+  });
+
   it("Barbaro: l'Ira si attiva, dà danni e resistenze, e si spegne", () => {
     const ch = hero("barbarian", 9);
     const on = useAction(ch, registry(), "barbarian.rage");

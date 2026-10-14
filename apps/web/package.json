@@ -15,6 +15,7 @@
     "@dnd/engine": "workspace:*",
     "@dnd/importer": "workspace:*",
     "firebase": "^12.19.0",
+    "pdfjs-dist": "4.10.38",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router": "^7.18.0"

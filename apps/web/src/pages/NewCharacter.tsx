@@ -11,6 +11,7 @@ import {
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { AutomationSwitch } from "../components/AutomationSwitch";
+import { EMPTY_GEAR, resolveGear, StartingGear, type GearState } from "../components/StartingGear";
 import { ABILITY_NAMES, SPECIES_LABEL, registry } from "../content";
 import { repo } from "../data";
 import { backgroundFits } from "../data/backgroundsByClass";
@@ -46,6 +47,7 @@ export function NewCharacter() {
   const [plus1, setPlus1] = useState<Ability | "">("");
   const [automation, setAutomation] = useState<AutomationLevel | undefined>();
   const [saving, setSaving] = useState(false);
+  const [gear, setGear] = useState<GearState>(EMPTY_GEAR);
 
   const bg = registry.backgrounds.get(backgroundId)!;
   const bgAbilities = bg.abilities ?? [];
@@ -71,6 +73,7 @@ export function NewCharacter() {
   if (!name.trim()) problems.push("Dai un nome al personaggio.");
   if (!finalBase) problems.push("Assegna tutti i valori dell'array standard.");
   if (method === "pointbuy" && (spent === null || spent > POINT_BUY_BUDGET)) problems.push(`Point buy: massimo ${POINT_BUY_BUDGET} punti, punteggi da 8 a 15.`);
+  if (gear.mode === "gold" && gear.gold === null) problems.push("Tira o scrivi le monete d'oro iniziali.");
   if (bgAbilities.length > 0 && Object.keys(boosts).length === 0) problems.push(`Scegli i bonus di caratteristica del background (${bg.name}).`);
 
   const usedStandard = (except: Ability) =>
@@ -79,6 +82,7 @@ export function NewCharacter() {
   const submit = async () => {
     if (problems.length || !finalBase || !user) return;
     setSaving(true);
+    const start = resolveGear(classId, backgroundId, gear);
     const ch = createCharacter(
       {
         id: crypto.randomUUID(),
@@ -90,9 +94,11 @@ export function NewCharacter() {
         backgroundBoosts: bgAbilities.length > 0 ? boosts : {},
         automation,
         ownerUid: user.uid,
+        equipment: start.equipment,
       },
       registry,
     );
+    if (start.gp) ch.coins = { gp: start.gp };
     try {
       await repo.saveCharacter(ch);
       nav(`/c/${ch.id}`);
@@ -127,6 +133,7 @@ export function NewCharacter() {
               value={classId}
               onChange={(e) => {
                 setClass(e.currentTarget.value);
+                setGear(EMPTY_GEAR);
                 setPlus1("");
                 setPlus2("");
               }}
@@ -265,6 +272,8 @@ export function NewCharacter() {
           </>
         )}
       </section>
+
+      <StartingGear classId={classId} backgroundId={backgroundId} value={gear} onChange={setGear} />
 
       <section className="panel form">
         <AutomationSwitch value={automation} inherited={pref ?? "assisted"} onChange={setAutomation} />

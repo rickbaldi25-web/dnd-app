@@ -15,6 +15,8 @@ export interface Campaign {
   memberUids: string[];
   /** Livello di automazione imposto dal Master a tutti i personaggi della campagna. */
   automationLock?: AutomationLevel;
+  /** Come si sale di livello: con i PE (di partenza) o a pietre miliari, decise dal Master. */
+  progression?: "xp" | "milestone";
 }
 
 /** Un mostro in combattimento, per come lo vedono tutti: nome e iniziativa, niente statistiche. */
@@ -33,6 +35,15 @@ export interface Encounter {
   /** Di chi è il turno: id di un personaggio o di un mostro. */
   currentId?: string;
   monsters: EncounterMonster[];
+  /** Condizioni che scadono a un turno preciso; chiave "bersaglio|condizione". Le altre contano a round. */
+  timers?: Record<string, ConditionTimer>;
+}
+
+/** Scadenza legata al turno di una creatura: all'inizio o alla fine. skip = la fine del turno in corso non conta. */
+export interface ConditionTimer {
+  tick: "start" | "end";
+  on: string;
+  skip?: boolean;
 }
 
 /** Ciò che dei mostri vede solo il Master. */
@@ -221,6 +232,8 @@ export interface Repository {
   deleteCampaign(id: string): Promise<void>;
   /** Solo il Master. null toglie il blocco. */
   setAutomationLock(id: string, level: AutomationLevel | null): Promise<void>;
+  /** Solo il Master. */
+  setProgression(id: string, progression: "xp" | "milestone"): Promise<void>;
   /** Il giocatore si toglie dall'elenco. I suoi personaggi vanno scollegati a parte. */
   leaveCampaign(id: string, uid: string): Promise<void>;
   watchEncounter(campaignId: string, cb: (e: Encounter | null) => void): Unsubscribe;
@@ -268,6 +281,9 @@ export interface Repository {
   /** "Sono qui": da richiamare a intervalli finché la pagina è aperta. */
   touchPresence(campaignId: string, user: { uid: string; name: string }): Promise<void>;
   watchPresence(campaignId: string, cb: (list: Presence[]) => void): Unsubscribe;
+  /** Cosa l'utente ha già visto in una campagna (handout, riassunti): uguale su tutti i suoi dispositivi. */
+  watchSeen(uid: string, campaignId: string, cb: (seen: Record<string, Record<string, string | number>>) => void): Unsubscribe;
+  saveSeen(uid: string, campaignId: string, kind: string, entries: Record<string, string | number>): Promise<void>;
   getPrefs(uid: string): Promise<UserPrefs>;
   savePrefs(uid: string, prefs: UserPrefs): Promise<void>;
 }

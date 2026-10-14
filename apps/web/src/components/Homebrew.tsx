@@ -1,5 +1,4 @@
 import type { Ability, ItemDef, SpellDef, SpellSchool, WeaponProperty } from "@dnd/engine";
-import { importCompendium } from "@dnd/importer";
 import { useState } from "react";
 import { ABILITY_NAMES, DAMAGE_TYPES, registry } from "../content";
 import { repo, type Homebrew } from "../data";
@@ -38,24 +37,32 @@ const newId = (name: string, taken: Set<string>) => {
 /** Un oggetto senza id, tenendo distinti arma, armatura, scudo e oggetto generico. */
 type NewItem = ItemDef extends infer T ? (T extends ItemDef ? Omit<T, "id"> : never) : never;
 
-function ItemForm({ onAdd }: { onAdd: (item: NewItem) => void }) {
-  const [name, setName] = useState("");
-  const [kind, setKind] = useState<keyof typeof KINDS>("weapon");
-  const [description, setDescription] = useState("");
-  const [category, setCategory] = useState("simple");
-  const [range, setRange] = useState<"melee" | "ranged">("melee");
-  const [damage, setDamage] = useState("1d8");
-  const [damageType, setDamageType] = useState<"bludgeoning" | "piercing" | "slashing">("slashing");
-  const [props, setProps] = useState<WeaponProperty[]>([]);
-  const [armorCat, setArmorCat] = useState<"light" | "medium" | "heavy">("light");
-  const [ac, setAc] = useState("12");
-  const [magic, setMagic] = useState(false);
+/** I campi che il modulo non mostra (prezzo, rarità, gittata...) restano com'erano se il tipo non cambia. */
+function keep<T extends { kind: string }>(initial: ItemDef | undefined, next: T): T {
+  if (!initial || initial.kind !== next.kind) return next;
+  const { id: _id, description: _d, magic: _m, ...rest } = initial as ItemDef & Record<string, unknown>;
+  return { ...rest, ...next };
+}
+
+function ItemForm({ initial, onAdd, onCancel }: { initial?: ItemDef; onAdd: (item: NewItem) => void; onCancel?: () => void }) {
+  const [name, setName] = useState(initial?.name ?? "");
+  const [kind, setKind] = useState<keyof typeof KINDS>(initial?.kind ?? "weapon");
+  const [description, setDescription] = useState(initial?.description ?? "");
+  const [category, setCategory] = useState<string>(initial?.kind === "weapon" ? initial.category : "simple");
+  const [range, setRange] = useState<"melee" | "ranged">(initial?.kind === "weapon" ? initial.range : "melee");
+  const [damage, setDamage] = useState(initial?.kind === "weapon" ? initial.damage : "1d8");
+  const [damageType, setDamageType] = useState<"bludgeoning" | "piercing" | "slashing">(initial?.kind === "weapon" ? initial.damageType : "slashing");
+  const [props, setProps] = useState<WeaponProperty[]>(initial?.kind === "weapon" ? initial.properties : []);
+  const [armorCat, setArmorCat] = useState<"light" | "medium" | "heavy">(initial?.kind === "armor" ? initial.category : "light");
+  const [ac, setAc] = useState(initial?.kind === "armor" ? String(initial.baseAC) : initial?.kind === "shield" ? String(initial.bonus) : "12");
+  const [magic, setMagic] = useState(!!initial?.magic);
   const submit = () => {
     const common = { name: name.trim(), ...(description.trim() ? { description: description.trim() } : {}), ...(magic ? { magic: true } : {}) };
-    if (kind === "weapon") onAdd({ ...common, kind, category: category as "simple" | "martial", range, damage: damage.trim() || "1d4", damageType, properties: props });
-    else if (kind === "armor") onAdd({ ...common, kind, category: armorCat, baseAC: Number(ac) || 10, dexCap: armorCat === "light" ? null : armorCat === "medium" ? 2 : 0 });
-    else if (kind === "shield") onAdd({ ...common, kind, bonus: Number(ac) || 2 });
-    else onAdd({ ...common, kind });
+    if (kind === "weapon") onAdd(keep(initial, { ...common, kind, category: category as "simple" | "martial", range, damage: damage.trim() || "1d4", damageType, properties: props }));
+    else if (kind === "armor") onAdd(keep(initial, { ...common, kind, category: armorCat, baseAC: Number(ac) || 10, dexCap: armorCat === "light" ? null : armorCat === "medium" ? 2 : 0 }));
+    else if (kind === "shield") onAdd(keep(initial, { ...common, kind, bonus: Number(ac) || 2 }));
+    else onAdd(keep(initial, { ...common, kind }));
+    if (initial) return;
     setName("");
     setDescription("");
   };
@@ -117,32 +124,42 @@ function ItemForm({ onAdd }: { onAdd: (item: NewItem) => void }) {
         </label>
       )}
       <textarea rows={2} value={description} placeholder="Descrizione (facoltativa)" aria-label="Descrizione dell'oggetto" onChange={(e) => setDescription(e.currentTarget.value)} />
-      <button className="btn" disabled={!name.trim()} onClick={submit}>
-        Aggiungi oggetto
-      </button>
+      <div className="row">
+        <button className="btn" disabled={!name.trim()} onClick={submit}>
+          {initial ? "Salva modifiche" : "Aggiungi oggetto"}
+        </button>
+        {onCancel && (
+          <button className="btn btn-quiet" onClick={onCancel}>
+            Annulla
+          </button>
+        )}
+      </div>
     </div>
   );
 }
 
-function SpellForm({ onAdd }: { onAdd: (spell: Omit<SpellDef, "id">) => void }) {
+function SpellForm({ initial, onAdd, onCancel }: { initial?: SpellDef; onAdd: (spell: Omit<SpellDef, "id">) => void; onCancel?: () => void }) {
   const casters = [...registry.classes.values()].filter((c) => c.spellcasting).sort((a, b) => a.name.localeCompare(b.name, "it"));
-  const [name, setName] = useState("");
-  const [level, setLevel] = useState(1);
-  const [school, setSchool] = useState<SpellSchool>("evocation");
-  const [castingTime, setCastingTime] = useState("1 azione");
-  const [range, setRange] = useState("18 metri");
-  const [components, setComponents] = useState("V, S");
-  const [duration, setDuration] = useState("Istantanea");
-  const [concentration, setConcentration] = useState(false);
-  const [ritual, setRitual] = useState(false);
-  const [lists, setLists] = useState<string[]>([]);
-  const [description, setDescription] = useState("");
-  const [dice, setDice] = useState("");
-  const [damageType, setDamageType] = useState("fire");
-  const [resolve, setResolve] = useState<"" | "attack" | Ability>("");
+  const [name, setName] = useState(initial?.name ?? "");
+  const [level, setLevel] = useState(initial?.level ?? 1);
+  const [school, setSchool] = useState<SpellSchool>(initial?.school ?? "evocation");
+  const [castingTime, setCastingTime] = useState(initial?.castingTime ?? "1 azione");
+  const [range, setRange] = useState(initial?.range ?? "18 metri");
+  const [components, setComponents] = useState(initial?.components ?? "V, S");
+  const [duration, setDuration] = useState(initial?.duration ?? "Istantanea");
+  const [concentration, setConcentration] = useState(!!initial?.concentration);
+  const [ritual, setRitual] = useState(!!initial?.ritual);
+  const [lists, setLists] = useState<string[]>(initial?.lists ?? []);
+  const [description, setDescription] = useState(initial?.description ?? "");
+  const [dice, setDice] = useState(initial?.roll && "dice" in initial.roll ? String(initial.roll.dice) : "");
+  const [damageType, setDamageType] = useState(initial?.roll && "damageType" in initial.roll ? String(initial.roll.damageType) : "fire");
+  const [resolve, setResolve] = useState<"" | "attack" | Ability>(initial?.attack ? "attack" : (initial?.save ?? ""));
   const submit = () => {
     const timing = /bonus/i.test(castingTime) ? "bonus" : /reazione/i.test(castingTime) ? "reaction" : /azione/i.test(castingTime) ? "action" : "special";
+    // Modificando, i campi che il modulo non tocca (materiali, livelli superiori...) restano.
+    const { id: _id, concentration: _c, ritual: _r, attack: _a, save: _s, roll: _roll, ...kept } = initial ?? ({} as Partial<SpellDef>);
     onAdd({
+      ...kept,
       name: name.trim(),
       level,
       school,
@@ -158,6 +175,7 @@ function SpellForm({ onAdd }: { onAdd: (spell: Omit<SpellDef, "id">) => void }) 
       ...(resolve === "attack" ? { attack: "ranged" as const } : resolve ? { save: resolve } : {}),
       ...(dice.trim() ? { roll: { kind: "damage" as const, dice: dice.trim(), damageType } } : {}),
     });
+    if (initial) return;
     setName("");
     setDescription("");
   };
@@ -222,9 +240,16 @@ function SpellForm({ onAdd }: { onAdd: (spell: Omit<SpellDef, "id">) => void }) 
         )}
       </div>
       <textarea rows={3} value={description} placeholder="Descrizione" aria-label="Descrizione dell'incantesimo" onChange={(e) => setDescription(e.currentTarget.value)} />
-      <button className="btn" disabled={!name.trim() || lists.length === 0} onClick={submit}>
-        Aggiungi incantesimo
-      </button>
+      <div className="row">
+        <button className="btn" disabled={!name.trim() || lists.length === 0} onClick={submit}>
+          {initial ? "Salva modifiche" : "Aggiungi incantesimo"}
+        </button>
+        {onCancel && (
+          <button className="btn btn-quiet" onClick={onCancel}>
+            Annulla
+          </button>
+        )}
+      </div>
       {name.trim() && lists.length === 0 && <span className="muted small"> Scegli almeno una classe che può sceglierlo.</span>}
     </div>
   );
@@ -234,6 +259,7 @@ function SpellForm({ onAdd }: { onAdd: (spell: Omit<SpellDef, "id">) => void }) 
 export function HomebrewPanel({ campaignId, homebrew, isDm }: { campaignId: string; homebrew: Homebrew; isDm: boolean }) {
   const { push } = useLog();
   const [form, setForm] = useState<"" | "item" | "spell">("");
+  const [editing, setEditing] = useState<string | null>(null);
   const total = homebrew.items.length + homebrew.spells.length;
   const taken = new Set([...homebrew.items.map((i) => i.id), ...homebrew.spells.map((s) => s.id)]);
   const save = (next: Homebrew) => {
@@ -245,6 +271,8 @@ export function HomebrewPanel({ campaignId, homebrew, isDm }: { campaignId: stri
   };
   const importFile = async (file: File) => {
     try {
+      // L'importatore è grande e serve di rado: si scarica solo adesso.
+      const { importCompendium } = await import("@dnd/importer");
       const { pack } = importCompendium(await file.text(), { id: "hb", name: file.name });
       const ids = new Set(taken);
       const withId = <T extends { id: string; name: string }>(x: T): T => {
@@ -276,9 +304,25 @@ export function HomebrewPanel({ campaignId, homebrew, isDm }: { campaignId: stri
               {i.name} <span className="muted small">{KINDS[i.kind]}{i.kind === "weapon" ? `, ${i.damage} ${DAMAGE_TYPES[i.damageType]}` : i.kind === "armor" ? `, CA ${i.baseAC}` : ""}</span>
             </span>
             {isDm && (
-              <button className="icon-btn" aria-label={`Elimina ${i.name}`} onClick={() => save({ ...homebrew, items: homebrew.items.filter((x) => x.id !== i.id) })}>
-                ×
-              </button>
+              <span className="row">
+                <button className="link-btn" aria-expanded={editing === i.id} onClick={() => setEditing(editing === i.id ? null : i.id)}>
+                  Modifica
+                </button>
+                <button className="icon-btn" aria-label={`Elimina ${i.name}`} onClick={() => save({ ...homebrew, items: homebrew.items.filter((x) => x.id !== i.id) })}>
+                  ×
+                </button>
+              </span>
+            )}
+            {editing === i.id && (
+              <ItemForm
+                key={i.id}
+                initial={i}
+                onCancel={() => setEditing(null)}
+                onAdd={(item) => {
+                  save({ ...homebrew, items: homebrew.items.map((x) => (x.id === i.id ? ({ ...item, id: i.id } as ItemDef) : x)) });
+                  setEditing(null);
+                }}
+              />
             )}
           </li>
         ))}
@@ -288,9 +332,25 @@ export function HomebrewPanel({ campaignId, homebrew, isDm }: { campaignId: stri
               {s.name} <span className="muted small">{s.level === 0 ? "trucchetto" : `incantesimo di ${s.level}°`}, {s.lists.map((l) => registry.classes.get(l)?.name ?? l).join(", ")}</span>
             </span>
             {isDm && (
-              <button className="icon-btn" aria-label={`Elimina ${s.name}`} onClick={() => save({ ...homebrew, spells: homebrew.spells.filter((x) => x.id !== s.id) })}>
-                ×
-              </button>
+              <span className="row">
+                <button className="link-btn" aria-expanded={editing === s.id} onClick={() => setEditing(editing === s.id ? null : s.id)}>
+                  Modifica
+                </button>
+                <button className="icon-btn" aria-label={`Elimina ${s.name}`} onClick={() => save({ ...homebrew, spells: homebrew.spells.filter((x) => x.id !== s.id) })}>
+                  ×
+                </button>
+              </span>
+            )}
+            {editing === s.id && (
+              <SpellForm
+                key={s.id}
+                initial={s}
+                onCancel={() => setEditing(null)}
+                onAdd={(spell) => {
+                  save({ ...homebrew, spells: homebrew.spells.map((x) => (x.id === s.id ? { ...spell, id: s.id } : x)) });
+                  setEditing(null);
+                }}
+              />
             )}
           </li>
         ))}

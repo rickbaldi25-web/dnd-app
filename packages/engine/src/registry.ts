@@ -46,7 +46,13 @@ export function createRegistry(...packs: ContentPack[]): Registry {
     monsters: new Map(),
     ruleset: "2024",
   };
-  for (const p of packs) {
+  for (const p of packs) addPack(r, p);
+  return r;
+}
+
+/** Aggiunge un pacchetto a un registro esistente (per esempio caricato dopo l'avvio dell'app). */
+export function addPack(r: Registry, p: ContentPack): void {
+  {
     r.packs.push(p.id);
     if (p.ruleset) r.ruleset = p.ruleset;
     for (const x of p.monsters ?? []) r.monsters.set(x.id, x);
@@ -59,7 +65,6 @@ export function createRegistry(...packs: ContentPack[]): Registry {
     for (const x of p.skills ?? []) r.skills.set(x.id, x);
     for (const x of p.spells ?? []) r.spells.set(x.id, x);
   }
-  return r;
 }
 
 export function must<T>(map: Map<string, T>, id: string, what: string): T {

@@ -1,4 +1,4 @@
-import { crXp } from "@dnd/engine";
+import { crXp, type CharacterData } from "@dnd/engine";
 import { useEffect, useState } from "react";
 import { repo, type EncounterMonster, type MonsterSecret, type SessionNote } from "../data";
 import { today } from "./SessionNotes";
@@ -13,7 +13,7 @@ export function EndCombat({
   campaignId,
   monsters,
   secrets,
-  partySize,
+  party,
   onDone,
   onCancel,
   onError,
@@ -21,7 +21,7 @@ export function EndCombat({
   campaignId: string;
   monsters: EncounterMonster[];
   secrets: Record<string, MonsterSecret>;
-  partySize: number;
+  party: CharacterData[];
   onDone: () => void;
   onCancel: () => void;
   onError: (e: unknown) => void;
@@ -32,7 +32,11 @@ export function EndCombat({
   const [manual, setManual] = useState("");
   const [label, setLabel] = useState("Combattimento");
   const [target, setTarget] = useState<string | null>(null);
+  const [milestone, setMilestone] = useState(false);
+  const [toSheets, setToSheets] = useState(true);
   useEffect(() => repo.watchSessions(campaignId, setSessions), [campaignId]);
+  useEffect(() => repo.watchCampaign(campaignId, (c) => setMilestone(c?.progression === "milestone")), [campaignId]);
+  const partySize = party.length;
 
   const sorted = [...(sessions ?? [])].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt);
   // La sessione di oggi se c'è già, altrimenti una nuova.
@@ -49,6 +53,9 @@ export function EndCombat({
       : { id: `s-${Date.now().toString(36)}`, title: `Sessione ${sorted.length + 1}`, date: today(), recap: "", createdAt: Date.now(), awards: [entry] };
     try {
       await repo.saveSession(campaignId, next);
+      // La quota di ognuno si somma ai PE della sua scheda.
+      const share = partySize ? Math.floor(total / partySize) : 0;
+      if (!milestone && toSheets && share) for (const ch of party) await repo.updateCharacter(ch, { ...ch, xp: (ch.xp ?? 0) + share });
       onDone();
     } catch (e) {
       onError(e);
@@ -101,6 +108,12 @@ export function EndCombat({
           </select>
         </label>
       </div>
+      {!milestone && partySize > 0 && (
+        <label className="inv-equip small">
+          <input type="checkbox" checked={toSheets} onChange={(e) => setToSheets(e.currentTarget.checked)} />
+          <span>Aggiungi la quota anche alle schede dei personaggi</span>
+        </label>
+      )}
       <div className="row">
         <button className="btn btn-primary" disabled={!total || sessions === null} onClick={award}>
           Assegna {pe(total)} PE e termina

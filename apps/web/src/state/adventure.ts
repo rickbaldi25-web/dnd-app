@@ -2,6 +2,7 @@ import type { Coin, MonsterDef } from "@dnd/engine";
 import type { ImportedCampaign } from "@dnd/importer";
 import { registry } from "../content";
 import type { AdventureChapter, AdventureMeta, AdventureNote, EncounterPlan, PlanEntry, TreasureItem } from "../data";
+import { byteSize, DOC_LIMIT, splitChapter } from "./adventureSplit";
 
 /*
  * Da un'avventura importata ai dati dell'app: un documento per capitolo con note, PNG e incontri,
@@ -71,7 +72,10 @@ export function buildAdventure(c: ImportedCampaign, library: MonsterDef[]): Buil
     };
   });
   const items: AdventureNote[] = c.items.map((i) => ({ title: i.name, text: i.text ?? "" }));
-  return { meta: { name: c.name, notes: c.notes, items, docs: [], importedAt: Date.now() }, chapters, plans, unmatched: [...unmatched].sort() };
+  // Gli incontri preparati stanno tutti in un documento: se sono troppi, le loro note restano solo nel capitolo.
+  const lean = byteSize(plans) > DOC_LIMIT ? plans.map(({ notes: _n, ...p }) => p) : plans;
+  if (byteSize(lean) > DOC_LIMIT) throw new Error("L'avventura ha troppi incontri per essere salvata insieme agli altri: dividi il file in due avventure.");
+  return { meta: { name: c.name, notes: c.notes, items, docs: [], importedAt: Date.now() }, chapters: chapters.flatMap((ch) => splitChapter(ch)), plans: lean, unmatched: [...unmatched].sort() };
 }
 
 /** I link di Google Drive si aprono nell'anteprima incorporabile; gli altri restano come sono. */

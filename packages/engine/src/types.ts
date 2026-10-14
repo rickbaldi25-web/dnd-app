@@ -646,6 +646,8 @@ export interface CharacterData {
   /** Incantesimi scelti: chiave = id della classe da incantatore. */
   spells?: Record<string, SpellSelection>;
   equipment: EquipmentEntry[];
+  /** Punti esperienza totali. */
+  xp?: number;
   /** Borsello. */
   coins?: Partial<Record<Coin, number>>;
   state: CharacterState;

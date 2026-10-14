@@ -123,6 +123,8 @@ service cloud.firestore {
       match /presence/{userId} {
         allow read: if signedIn() && isMember(campaignId);
         allow write: if signedIn() && uid() == userId && isMember(campaignId);
+        // Il Master le cancella quando elimina la campagna.
+        allow delete: if signedIn() && isDm(campaignId);
       }
     }
   }

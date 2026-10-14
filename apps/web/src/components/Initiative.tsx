@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { CONDITIONS, loadMonsters, registry } from "../content";
 import { repo, type Encounter, type EncounterMonster, type MonsterSecret } from "../data";
 import { useLog } from "../state/log";
+import { ANCHOR_LABELS, makeTimer, tickConditions, timerKey, type ConditionAnchor } from "../state/conditionTimers";
 import { EndCombat } from "./EndCombat";
 import { MonsterStatBlock } from "./MonsterStatBlock";
 
@@ -198,6 +199,7 @@ export function InitiativePanel({ campaignId, party, isDm, uid }: { campaignId: 
   const [openSheet, setOpenSheet] = useState<string | null>(null);
   const [openRow, setOpenRow] = useState<string | null>(null);
   const [ending, setEnding] = useState(false);
+  const [anchors, setAnchors] = useState<Record<string, ConditionAnchor>>({});
   const [library, setLibrary] = useState<MonsterDef[] | null>(null);
   useEffect(() => {
     if (openSheet && !library) loadMonsters().then(setLibrary).catch(() => setLibrary([]));
@@ -231,35 +233,12 @@ export function InitiativePanel({ campaignId, party, isDm, uid }: { campaignId: 
     if (!ready.length) return;
     const i = ready.findIndex((c) => c.id === encounter.currentId);
     const wrapped = i >= 0 && i === ready.length - 1;
-    let monsters = encounter.monsters;
-    if (wrapped) {
-      // Nuovo round: le condizioni a tempo perdono un round, quelle arrivate a zero finiscono.
-      const ended: string[] = [];
-      monsters = monsters.map((m) => {
-        if (!m.conditions) return m;
-        const left: Record<string, number | null> = {};
-        for (const [id, n] of Object.entries(m.conditions)) {
-          if (n === null) left[id] = null;
-          else if (n > 1) left[id] = n - 1;
-          else ended.push(`${m.name}: ${CONDITIONS[id] ?? id}`);
-        }
-        return { ...m, conditions: left };
-      });
-      for (const ch of party) {
-        const timed = ch.state.conditionRounds ?? {};
-        if (!Object.keys(timed).length) continue;
-        const left: Record<string, number> = {};
-        const gone: string[] = [];
-        for (const [id, n] of Object.entries(timed)) {
-          if (n > 1) left[id] = n - 1;
-          else gone.push(id);
-        }
-        for (const id of gone) ended.push(`${ch.name}: ${CONDITIONS[id] ?? id}`);
-        repo.updateCharacter(ch, { ...ch, state: { ...ch.state, conditions: ch.state.conditions.filter((x) => !gone.includes(x)), conditionRounds: left } }).catch(failed);
-      }
-      if (ended.length) push({ title: "Condizioni terminate", lines: ended, rolls: [] });
-    }
-    save({ ...encounter, monsters, currentId: ready[(i + 1) % ready.length]!.id, round: encounter.round + (wrapped ? 1 : 0) });
+    const to = ready[(i + 1) % ready.length]!.id;
+    // Le condizioni scadono a ogni round oppure all'inizio o alla fine del turno a cui sono legate.
+    const t = tickConditions(encounter, party, CONDITIONS, { from: i >= 0 ? ready[i]!.id : undefined, to, wrapped });
+    for (const pc of t.pcs) repo.updateCharacter(pc.ch, { ...pc.ch, state: { ...pc.ch.state, conditions: pc.conditions, conditionRounds: pc.conditionRounds } }).catch(failed);
+    if (t.ended.length) push({ title: "Condizioni terminate", lines: t.ended, rolls: [] });
+    save({ ...encounter, monsters: t.monsters, timers: t.timers, currentId: to, round: encounter.round + (wrapped ? 1 : 0) });
   };
   const end = () => {
     setEnding(false);
@@ -277,7 +256,13 @@ export function InitiativePanel({ campaignId, party, isDm, uid }: { campaignId: 
   const setMonsterCondition = (m: EncounterMonster, id: string, on: boolean) => {
     const { [id]: _gone, ...rest } = m.conditions ?? {};
     const n = Math.floor(Number(rounds[m.id]) || 0);
-    setMonster(m.id, { conditions: on ? { ...rest, [id]: n > 0 ? n : null } : rest });
+    const { [timerKey(m.id, id)]: _old, ...timers } = encounter.timers ?? {};
+    const timer = on && n > 0 ? makeTimer(anchors[m.id] ?? "round", m.id, encounter.currentId) : null;
+    save({
+      ...encounter,
+      monsters: encounter.monsters.map((x) => (x.id === m.id ? { ...x, conditions: on ? { ...rest, [id]: n > 0 ? n : null } : rest } : x)),
+      timers: timer ? { ...timers, [timerKey(m.id, id)]: timer } : timers,
+    });
     setRounds({ ...rounds, [m.id]: "" });
   };
   const addMonsters = (monster: NewMonster, count: number) => {
@@ -310,7 +295,7 @@ export function InitiativePanel({ campaignId, party, isDm, uid }: { campaignId: 
           </span>
         )}
       </div>
-      {isDm && ending && <EndCombat campaignId={campaignId} monsters={encounter.monsters} secrets={secrets} partySize={party.length} onDone={end} onCancel={() => setEnding(false)} onError={failed} />}
+      {isDm && ending && <EndCombat campaignId={campaignId} monsters={encounter.monsters} secrets={secrets} party={party} onDone={end} onCancel={() => setEnding(false)} onError={failed} />}
       <ol className="init-list">
         {order.map((c) => {
           const mine = c.character?.ownerUid === uid;
@@ -372,6 +357,7 @@ export function InitiativePanel({ campaignId, party, isDm, uid }: { campaignId: 
               {isDm && secret && openRow === c.id && (
                 <span className="init-monster init-more">
                   <input type="number" min={1} value={rounds[c.id] ?? ""} placeholder="round" title="Durata in round: vuoto = finché non la togli" aria-label={`Durata in round della condizione per ${c.name}`} className="short-input" onChange={(e) => setRounds({ ...rounds, [c.id]: e.currentTarget.value })} />
+                  {Number(rounds[c.id]) > 0 && <AnchorSelect value={anchors[c.id] ?? "round"} hasActor={!!encounter.currentId} label={c.name} onChange={(a) => setAnchors({ ...anchors, [c.id]: a })} />}
                   <select value="" aria-label={`Aggiungi una condizione a ${c.name}`} onChange={(e) => monster && e.currentTarget.value && setMonsterCondition(monster, e.currentTarget.value, true)}>
                     <option value="">Condizione…</option>
                     {Object.entries(CONDITIONS)
@@ -402,6 +388,21 @@ export function InitiativePanel({ campaignId, party, isDm, uid }: { campaignId: 
       {order.length === 0 && <p className="muted small">Nessuno in combattimento: collega dei personaggi o aggiungi dei mostri.</p>}
       {isDm && <AddMonster onAdd={addMonsters} />}
     </section>
+  );
+}
+
+/** Quando scade una condizione a tempo: a ogni round o a un turno preciso. */
+export function AnchorSelect({ value, hasActor, label, onChange }: { value: ConditionAnchor; hasActor: boolean; label: string; onChange: (a: ConditionAnchor) => void }) {
+  return (
+    <select value={value} aria-label={`Quando scade la condizione per ${label}`} onChange={(e) => onChange(e.currentTarget.value as ConditionAnchor)}>
+      {(Object.keys(ANCHOR_LABELS) as ConditionAnchor[])
+        .filter((a) => hasActor || !a.startsWith("actor"))
+        .map((a) => (
+          <option key={a} value={a}>
+            {ANCHOR_LABELS[a]}
+          </option>
+        ))}
+    </select>
   );
 }
 

@@ -289,6 +289,10 @@ function importClass(n: XmlNode, ctx: Ctx, usedClassIds: Set<string>): { cls: Cl
       if (m && m[1]!.trim() === subGroup && !SUFFIX.test(f.name) && !subNames.has(m[2]!.trim())) subNames.set(m[2]!.trim(), { level: f.level, intro: f });
     }
   }
+  // "Otherworldly Patron: The Hexblade" ha i privilegi scritti "(Hexblade)": l'articolo iniziale non conta.
+  const normSub = (x: string) => x.trim().replace(/^the\s+/i, "").toLowerCase();
+  const subCanon = new Map([...subNames.keys()].map((k) => [normSub(k), k]));
+  const subOf = (x: string) => subCanon.get(normSub(x));
   const subclassLevel = subNames.size ? Math.min(...[...subNames.values()].map((s) => s.level)) : 3;
 
   /* --- costruzione dei privilegi --- */
@@ -348,8 +352,8 @@ function importClass(n: XmlNode, ctx: Ctx, usedClassIds: Set<string>): { cls: Cl
     const sfx = f.name.match(SUFFIX);
     const colon = (sfx ? sfx[1]! : f.name).match(/^([^:]+):\s*(.+)$/);
     if (!sfx && colon && colon[1]!.trim() === subGroup && subNames.has(colon[2]!.trim())) continue; // introduzione della sottoclasse
-    if (sfx && subNames.has(sfx[2]!.trim())) {
-      const sub = sfx[2]!.trim();
+    if (sfx && subOf(sfx[2]!)) {
+      const sub = subOf(sfx[2]!)!;
       if (colon && byName.has(`${sub}|${colon[1]!.trim()}`)) {
         pendingOptions.push(f);
         continue;
@@ -366,7 +370,7 @@ function importClass(n: XmlNode, ctx: Ctx, usedClassIds: Set<string>): { cls: Cl
   // Secondo passaggio: "Stile di Combattimento: Tiro" diventa un'opzione del privilegio "Stile di Combattimento".
   for (const f of pendingOptions) {
     const sfx = f.name.match(SUFFIX);
-    const sub = sfx && subNames.has(sfx[2]!.trim()) ? sfx[2]!.trim() : "";
+    const sub = (sfx && subOf(sfx[2]!)) || "";
     const colon = (sub ? sfx![1]! : f.name).match(/^([^:]+):\s*(.+)$/)!;
     const parent = byName.get(`${sub}|${colon[1]!.trim()}`) ?? byName.get(`|${colon[1]!.trim()}`);
     if (parent) addOption(parent, f, colon[2]!.trim(), parent.id);

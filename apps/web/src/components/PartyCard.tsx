@@ -2,7 +2,9 @@ import { applyDamage, applyHealing, applyProposal, computeSheet, type CharacterD
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { CONDITIONS, ftToM, registry, SENSES } from "../content";
-import { repo } from "../data";
+import { repo, type ConditionTimer } from "../data";
+import { makeTimer, timerKey, type ConditionAnchor } from "../state/conditionTimers";
+import { AnchorSelect, useEncounter } from "./Initiative";
 import { useLog } from "../state/log";
 
 function sheetOf(ch: CharacterData): ComputedSheet | null {
@@ -18,6 +20,8 @@ export function PartyCard({ ch, canEdit, mine, online, current = false }: { ch: 
   const { push } = useLog();
   const [amount, setAmount] = useState("");
   const [rounds, setRounds] = useState("");
+  const [anchor, setAnchor] = useState<ConditionAnchor>("round");
+  const encounter = useEncounter(canEdit ? ch.campaignId : undefined);
   const sheet = useMemo(() => sheetOf(ch), [ch]);
   if (!sheet) {
     return (
@@ -37,14 +41,23 @@ export function PartyCard({ ch, canEdit, mine, online, current = false }: { ch: 
   const n = Math.max(0, Math.floor(Number(amount) || 0));
   const failed = (e: unknown) => push({ title: "Salvataggio non riuscito", lines: [String(e instanceof Error ? e.message : e)], tone: "bad" });
   const durations = s.conditionRounds ?? {};
+  /** Toglie o mette il timer della condizione nel combattimento in corso. */
+  const setTimer = (id: string, timer: ConditionTimer | null) => {
+    if (!encounter?.active || !ch.campaignId) return;
+    const { [timerKey(ch.id, id)]: _old, ...timers } = encounter.timers ?? {};
+    if (!timer && !_old) return;
+    repo.saveEncounter(ch.campaignId, { ...encounter, timers: timer ? { ...timers, [timerKey(ch.id, id)]: timer } : timers }).catch(failed);
+  };
   const addCondition = (id: string) => {
     const n = Math.floor(Number(rounds) || 0);
     repo.updateCharacter(ch, { ...ch, state: { ...s, conditions: [...s.conditions, id], conditionRounds: n > 0 ? { ...durations, [id]: n } : durations } }).catch(failed);
+    if (n > 0) setTimer(id, makeTimer(anchor, ch.id, encounter?.currentId));
     setRounds("");
   };
   const removeCondition = (id: string) => {
     const { [id]: _gone, ...rest } = durations;
     repo.updateCharacter(ch, { ...ch, state: { ...s, conditions: s.conditions.filter((x) => x !== id), conditionRounds: rest } }).catch(failed);
+    setTimer(id, null);
   };
   const conditionLabel = (id: string) => `${CONDITIONS[id] ?? id}${durations[id] ? ` (${durations[id]})` : ""}`;
   const act = (kind: "damage" | "heal") => {
@@ -118,6 +131,7 @@ export function PartyCard({ ch, canEdit, mine, online, current = false }: { ch: 
             Cura
           </button>
           <input type="number" min={1} value={rounds} placeholder="round" title="Durata in round: vuoto = finché non la togli" aria-label={`Durata in round della condizione per ${ch.name}`} className="party-amount" onChange={(e) => setRounds(e.currentTarget.value)} />
+          {encounter?.active && Number(rounds) > 0 && <AnchorSelect value={anchor} hasActor={!!encounter.currentId} label={ch.name} onChange={setAnchor} />}
           <select value="" aria-label={`Aggiungi una condizione a ${ch.name}`} onChange={(e) => e.currentTarget.value && addCondition(e.currentTarget.value)}>
             <option value="">Condizione…</option>
             {Object.entries(CONDITIONS)

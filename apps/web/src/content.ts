@@ -1,25 +1,47 @@
-import { srd } from "@dnd/content-srd";
-import { ABILITIES, createRegistry, type ContentPack, type ItemDef, type MonsterDef, type SpellDef } from "@dnd/engine";
+import { ABILITIES, addPack, createRegistry, type ContentPack, type ItemDef, type MonsterDef, type SpellDef } from "@dnd/engine";
 
 /**
  * Contenuti importati dai compendi (packages/importer). La cartella è esclusa da git:
  * su un computer senza quei file l'app ripiega sul pacchetto SRD incluso nel progetto.
- * I mostri hanno un file a parte, caricato solo quando servono al Master.
+ * Non stanno nel codice dell'app: sono file JSON a parte, scaricati in parallelo all'avvio
+ * e tenuti in cache dal browser finché non cambiano. I mostri si scaricano solo quando servono al Master.
  */
-const imported = import.meta.glob<ContentPack>("../../../packages/content-private/generated/*.{core,spells,items}.json", {
+const packUrls = import.meta.glob<string>("../../../packages/content-private/generated/*.{core,spells,items}.json", {
   eager: true,
+  query: "?url",
   import: "default",
 });
-// Prima i file "core": sono quelli che dichiarano l'edizione delle regole.
-const packs = Object.entries(imported)
-  .sort(([a], [b]) => Number(b.includes(".core.")) - Number(a.includes(".core.")))
-  .map(([, p]) => p);
 
-/**
- * Registro dei contenuti usato dall'app. Qui in futuro si aggiungono
- * i pacchetti homebrew della campagna e del giocatore.
- */
-export const registry = packs.length ? createRegistry(...packs) : createRegistry(srd);
+/** Registro dei contenuti usato dall'app: vuoto finché loadContent non l'ha riempito. */
+export const registry = createRegistry();
+
+/** Nelle regole 2014 le specie si chiamano razze. Si aggiorna quando i contenuti arrivano. */
+export let SPECIES_LABEL = "Specie";
+
+let loading: Promise<void> | undefined;
+/** Scarica i contenuti e li mette nel registro. Va chiamata (e attesa) prima di mostrare le pagine. */
+export function loadContent(): Promise<void> {
+  loading ??= (async () => {
+    // Prima i file "core": sono quelli che dichiarano l'edizione delle regole.
+    const urls = Object.entries(packUrls)
+      .sort(([a], [b]) => Number(b.includes(".core.")) - Number(a.includes(".core.")))
+      .map(([, url]) => url);
+    const packs = urls.length
+      ? await Promise.all(
+          urls.map(async (url) => {
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`Contenuti non scaricati (${res.status})`);
+            return (await res.json()) as ContentPack;
+          }),
+        )
+      : [(await import("@dnd/content-srd")).srd];
+    for (const p of packs) addPack(registry, p);
+    SPECIES_LABEL = registry.ruleset === "2014" ? "Razza" : "Specie";
+  })();
+  // Se il download fallisce si potrà riprovare.
+  loading.catch(() => (loading = undefined));
+  return loading;
+}
 
 /*
  * Contenuti propri di una campagna (oggetti e incantesimi del Master). Si aggiungono al registro
@@ -52,17 +74,15 @@ export function applyHomebrew(pack: { items: ItemDef[]; spells: SpellDef[] } | n
 export const isHomebrew = (id: string) => id.startsWith("hb.");
 
 /** I mostri importati: un file grande, caricato solo quando il Master ne cerca uno. */
-const monsterFiles = import.meta.glob<{ monsters?: MonsterDef[] }>("../../../packages/content-private/generated/*.monsters.json", { import: "default" });
+const monsterUrls = import.meta.glob<string>("../../../packages/content-private/generated/*.monsters.json", { eager: true, query: "?url", import: "default" });
 let monsters: Promise<MonsterDef[]> | undefined;
 export function loadMonsters(): Promise<MonsterDef[]> {
-  monsters ??= Promise.all(Object.values(monsterFiles).map((load) => load())).then((files) =>
+  monsters ??= Promise.all(Object.values(monsterUrls).map((url) => fetch(url).then((r) => r.json() as Promise<{ monsters?: MonsterDef[] }>))).then((files) =>
     files.flatMap((f) => f.monsters ?? []).sort((a, b) => a.name.localeCompare(b.name, "it")),
   );
+  monsters.catch(() => (monsters = undefined));
   return monsters;
 }
-
-/** Nelle regole 2014 le specie si chiamano razze. */
-export const SPECIES_LABEL = registry.ruleset === "2014" ? "Razza" : "Specie";
 
 export const ABILITY_NAMES = {
   str: { short: "FOR", name: "Forza" },

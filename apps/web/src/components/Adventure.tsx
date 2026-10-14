@@ -1,13 +1,14 @@
 import { rateEncounter, type CharacterData, type MonsterDef } from "@dnd/engine";
-import { importCampaign } from "@dnd/importer";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { loadMonsters } from "../content";
 import { repo, type AdventureChapter, type AdventureDoc, type AdventureMeta, type AdventureNote, type EncounterPlan, type LootItem, type MonsterSecret } from "../data";
 import { buildAdventure, embeddableUrl, type BuiltAdventure } from "../state/adventure";
+import { useLocalFiles, type LocalFile } from "../state/localFiles";
 import { useLog } from "../state/log";
 import { startPlan } from "./EncounterBuilder";
 import { useEncounter } from "./Initiative";
 import { MonsterStatBlock } from "./MonsterStatBlock";
+import { extractPages, PdfViewer } from "./PdfViewer";
 
 const DIFFICULTY: Record<string, string> = { trivial: "Banale", easy: "Facile", medium: "Medio", hard: "Difficile", deadly: "Mortale" };
 
@@ -23,8 +24,142 @@ function Note({ note, open = false }: { note: AdventureNote; open?: boolean }) {
   );
 }
 
+/** Un pezzo di testo intorno alla parola trovata. */
+function snippet(text: string, q: string): string {
+  const at = text.toLowerCase().indexOf(q);
+  const from = Math.max(0, at - 70);
+  return `${from > 0 ? "…" : ""}${text.slice(from, at + q.length + 90).replace(/\s+/g, " ")}…`;
+}
+
+/**
+ * Un PDF dal computer: lo legge il lettore dell'app, che funziona anche su telefono,
+ * con la ricerca nel testo e il salto alla pagina trovata.
+ */
+function LocalViewer({ file, setPages }: { file: LocalFile; setPages: (f: LocalFile, pages: string[]) => Promise<void> }) {
+  const [query, setQuery] = useState("");
+  const [progress, setProgress] = useState<string | null>(null);
+  const [jumpTo, setJumpTo] = useState<{ page: number; at: number } | undefined>();
+  const q = query.trim().toLowerCase();
+  const hits = useMemo(() => (q.length >= 3 && file.pages ? file.pages.flatMap((t, i) => (t.toLowerCase().includes(q) ? [{ page: i + 1, text: snippet(t, q) }] : [])).slice(0, 40) : []), [q, file.pages]);
+  const index = async () => {
+    setProgress("Leggo il testo…");
+    try {
+      const pages = await extractPages(file.blob, (done, total) => setProgress(`Leggo il testo: pagina ${done} di ${total}`));
+      await setPages(file, pages);
+      setProgress(null);
+    } catch (e) {
+      setProgress(`Testo non leggibile: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+  return (
+    <>
+      <div className="row pdf-search">
+        {file.pages ? (
+          <input type="search" value={query} placeholder="Cerca nel PDF (almeno 3 lettere)" aria-label={`Cerca in ${file.title}`} onChange={(e) => setQuery(e.currentTarget.value)} />
+        ) : (
+          <button className="btn" disabled={!!progress && progress.startsWith("Leggo")} onClick={index}>
+            Rendi cercabile il testo
+          </button>
+        )}
+        {progress && <span className="muted small">{progress}</span>}
+      </div>
+      {file.pages && file.pages.every((p) => !p) && <p className="muted small">Questo PDF non contiene testo (sono immagini scansionate): la ricerca non trova nulla.</p>}
+      {q.length >= 3 && file.pages && (
+        <ul className="pdf-hits">
+          {hits.length === 0 && <li className="muted small">Nessuna pagina contiene «{query.trim()}».</li>}
+          {hits.map((h) => (
+            <li key={h.page}>
+              <button className="link-btn" onClick={() => setJumpTo({ page: h.page, at: Date.now() })}>
+                Pagina {h.page}
+              </button>{" "}
+              <span className="small muted">{h.text}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <PdfViewer source={file.blob} title={file.title} jumpTo={jumpTo} />
+    </>
+  );
+}
+
+/**
+ * Un documento online. I PDF a indirizzo diretto li legge il lettore dell'app; Google Drive e i siti
+ * che non lasciano leggere il file si mostrano incorporati come pagina.
+ */
+function RemoteDoc({ doc }: { doc: AdventureDoc }) {
+  const embed = embeddableUrl(doc.url);
+  const [frame, setFrame] = useState(embed !== doc.url || !/\.pdf(\?|#|$)/i.test(doc.url));
+  const fail = useCallback(() => setFrame(true), []);
+  return frame ? <iframe className="doc-frame" src={embed} title={doc.title} referrerPolicy="no-referrer" /> : <PdfViewer source={doc.url} title={doc.title} onFail={fail} />;
+}
+
+/** PDF tenuti nel browser di questo computer: non vanno online. */
+function LocalDocuments({ campaignId }: { campaignId: string }) {
+  const { push } = useLog();
+  const { files, unavailable, add, remove, setPages } = useLocalFiles(campaignId);
+  const [open, setOpen] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const mb = (n: number) => `${(n / 1024 / 1024).toLocaleString("it-IT", { maximumFractionDigits: 1 })} MB`;
+  return (
+    <div className="local-docs">
+      <h3>Su questo computer</h3>
+      {unavailable ? (
+        <p className="muted small">Questo browser non lascia salvare file (per esempio in una finestra anonima): usa un indirizzo online qui sotto.</p>
+      ) : (
+        <>
+          <ul className="handout-list">
+            {files.map((f) => (
+              <li key={f.id} className={open === f.id ? "is-open" : ""}>
+                <div className="row between">
+                  <button className="disclosure" aria-expanded={open === f.id} onClick={() => setOpen(open === f.id ? null : f.id)}>
+                    {f.title}
+                  </button>
+                  <span className="row">
+                    <span className="muted small">{mb(f.size)}</span>
+                    <button
+                      className="icon-btn"
+                      aria-label={`Togli ${f.title} da questo computer`}
+                      onClick={() => window.confirm(`Togliere «${f.title}» da questo browser? Il file sul computer resta.`) && remove(f.id)}
+                    >
+                      ×
+                    </button>
+                  </span>
+                </div>
+                {open === f.id && <LocalViewer file={f} setPages={setPages} />}
+              </li>
+            ))}
+          </ul>
+          <label className="btn">
+            {busy ? "Salvo…" : "Aggiungi un PDF dal computer"}
+            <input
+              type="file"
+              accept="application/pdf,.pdf"
+              hidden
+              onChange={async (e) => {
+                const file = e.currentTarget.files?.[0];
+                e.currentTarget.value = "";
+                if (!file) return;
+                setBusy(true);
+                try {
+                  await add(file);
+                } catch (err) {
+                  push({ title: "PDF non salvato", lines: [String(err instanceof Error ? err.message : err)], tone: "bad" });
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            />
+          </label>
+          <p className="muted small">Il file resta nel browser di questo dispositivo e non va online: su un altro dispositivo va aggiunto di nuovo.</p>
+        </>
+      )}
+      <h3>Online</h3>
+    </div>
+  );
+}
+
 /** Documenti esterni (il PDF dell'avventura, mappe): si leggono qui dentro, senza cambiare pagina. */
-function Documents({ meta, save }: { meta: AdventureMeta; save: (m: AdventureMeta) => void }) {
+function Documents({ campaignId, meta, save }: { campaignId: string; meta: AdventureMeta; save: (m: AdventureMeta) => void }) {
   const [open, setOpen] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [url, setUrl] = useState("");
@@ -40,7 +175,8 @@ function Documents({ meta, save }: { meta: AdventureMeta; save: (m: AdventureMet
   return (
     <section className="panel adventure-docs">
       <h2>Documenti</h2>
-      <p className="muted small">Il PDF dell'avventura o una mappa, da un indirizzo online (Google Drive condiviso, Dropbox, un sito). Si legge qui sotto; alcuni siti non si lasciano incorporare e vanno aperti in una nuova scheda.</p>
+      <LocalDocuments campaignId={campaignId} />
+      <p className="muted small">Il PDF dell'avventura o una mappa da un indirizzo online (Google Drive condiviso, Dropbox, un sito): si apre da ogni dispositivo. Alcuni siti non si lasciano incorporare e vanno aperti in una nuova scheda.</p>
       <ul className="handout-list">
         {meta.docs.map((d) => (
           <li key={d.url} className={open === d.url ? "is-open" : ""}>
@@ -57,7 +193,7 @@ function Documents({ meta, save }: { meta: AdventureMeta; save: (m: AdventureMet
                 </button>
               </span>
             </div>
-            {open === d.url && <iframe className="doc-frame" src={embeddableUrl(d.url)} title={d.title} referrerPolicy="no-referrer" />}
+            {open === d.url && <RemoteDoc doc={d} />}
           </li>
         ))}
       </ul>
@@ -83,6 +219,8 @@ function ImportBox({ campaignId, meta, chapters, plans }: { campaignId: string; 
     setBuilt(null);
     setBusy(true);
     try {
+      // L'importatore è grande e serve di rado: si scarica solo adesso.
+      const { importCampaign } = await import("@dnd/importer");
       const campaign = importCampaign(await file.text());
       setBuilt(buildAdventure(campaign, await loadMonsters()));
     } catch (e) {
@@ -308,7 +446,7 @@ export function AdventurePanel({ campaignId, party, onLaunched }: { campaignId: 
         );
       })}
 
-      <Documents meta={meta ?? { name: "", notes: [], items: [], docs: [] }} save={saveMeta} />
+      <Documents campaignId={campaignId} meta={meta ?? { name: "", notes: [], items: [], docs: [] }} save={saveMeta} />
     </>
   );
 }

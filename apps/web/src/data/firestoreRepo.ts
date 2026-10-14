@@ -39,6 +39,7 @@ export function firestoreRepo(db: Firestore): Repository {
     dmName: String(data.dmName ?? ""),
     memberUids: (data.memberUids as string[] | undefined) ?? [],
     ...(data.automationLock ? { automationLock: data.automationLock as AutomationLevel } : {}),
+    ...(data.progression === "milestone" ? { progression: "milestone" as const } : {}),
   });
   const presence = (campaignId: string) => collection(db, "campaigns", campaignId, "presence");
   return {
@@ -102,7 +103,21 @@ export function firestoreRepo(db: Firestore): Repository {
       return campaign;
     },
     async deleteCampaign(id) {
+      // Firestore non cancella da solo ciò che sta sotto un documento: prima il contenuto, per ultima la campagna,
+      // perché le regole controllano il Master proprio leggendo la campagna.
+      const groups = ["state", "secret", "rolls", "secretRolls", "presence", "handouts", "sessions", "adventure"];
+      for (const name of groups) {
+        const snap = await getDocs(collection(db, "campaigns", id, name));
+        for (let i = 0; i < snap.docs.length; i += 400) {
+          const batch = writeBatch(db);
+          for (const d of snap.docs.slice(i, i + 400)) batch.delete(d.ref);
+          await batch.commit();
+        }
+      }
       await deleteDoc(doc(campaigns, id));
+    },
+    async setProgression(id, progression) {
+      await updateDoc(doc(campaigns, id), { progression });
     },
     async setAutomationLock(id, level) {
       await updateDoc(doc(campaigns, id), { automationLock: level ?? deleteField() });
@@ -238,6 +253,13 @@ export function firestoreRepo(db: Firestore): Repository {
         (snap) => cb(snap.docs.map((d): Presence => ({ uid: d.id, name: String(d.data().name ?? ""), at: Number(d.data().at ?? 0) }))),
         () => cb([]),
       );
+    },
+    watchSeen(uid, campaignId, cb) {
+      return onSnapshot(doc(db, "users", uid), (d) => cb((d.data()?.seen?.[campaignId] as Record<string, Record<string, string | number>>) ?? {}), () => cb({}));
+    },
+    async saveSeen(uid, campaignId, kind, entries) {
+      // merge unisce le mappe annidate: si aggiungono solo le voci nuove.
+      await setDoc(doc(db, "users", uid), { seen: { [campaignId]: { [kind]: entries } } }, { merge: true });
     },
     async getPrefs(uid) {
       const d = await getDoc(doc(db, "users", uid));
