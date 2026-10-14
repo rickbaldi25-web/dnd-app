@@ -84,6 +84,10 @@ service cloud.firestore {
         allow read: if signedIn() && isMember(campaignId);
         allow write: if signedIn() && isDm(campaignId);
       }
+      // L'avventura importata (testi, PNG, incontri) e i suoi documenti: solo il Master.
+      match /adventure/{docId} {
+        allow read, write: if signedIn() && isDm(campaignId);
+      }
       // PF e CA dei mostri: solo il Master.
       match /secret/{docId} {
         allow read, write: if signedIn() && isDm(campaignId);

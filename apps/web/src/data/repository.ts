@@ -1,4 +1,4 @@
-import type { AutomationLevel, CharacterData, ItemDef, SpellDef } from "@dnd/engine";
+import type { AutomationLevel, CharacterData, Coin, ItemDef, MonsterDef, SpellDef } from "@dnd/engine";
 
 export type Unsubscribe = () => void;
 
@@ -60,6 +60,57 @@ export interface PlanEntry {
   monsterId?: string;
 }
 
+/** Una nota dell'avventura: titolo e testo. */
+export interface AdventureNote {
+  title: string;
+  text: string;
+}
+/** Un documento esterno da consultare, per esempio il PDF dell'avventura. */
+export interface AdventureDoc {
+  title: string;
+  url: string;
+}
+/** L'avventura della campagna: solo il Master la vede. */
+export interface AdventureMeta {
+  name: string;
+  notes: AdventureNote[];
+  /** Oggetti propri dell'avventura, con la loro descrizione. */
+  items: AdventureNote[];
+  docs: AdventureDoc[];
+  importedAt?: number;
+}
+export interface AdventureEncounter {
+  name: string;
+  notes: AdventureNote[];
+  treasure: { name: string; quantity: number; text?: string }[];
+  /** Mostri raggruppati: "3 × Goblin". */
+  groups: { label: string; count: number; hp: number; ac: number; cr: string; name: string }[];
+  planId?: string;
+}
+/** Un capitolo, salvato in un documento a sé per stare nei limiti di Firestore. */
+export interface AdventureChapter {
+  id: string;
+  order: number;
+  name: string;
+  notes: AdventureNote[];
+  npcs: { label: string; monster: MonsterDef }[];
+  encounters: AdventureEncounter[];
+}
+
+/** Un oggetto del tesoro: dai manuali (itemId) oppure scritto a mano. */
+export interface TreasureItem {
+  name: string;
+  quantity: number;
+  itemId?: string;
+  notes?: string;
+  /** Se sono monete: quali. La quantità è il numero di monete. */
+  coin?: Coin;
+}
+/** Un oggetto del bottino ancora da consegnare. */
+export interface LootItem extends TreasureItem {
+  id: string;
+}
+
 /** Un incontro che il Master prepara prima della sessione. Lo vede solo lui. */
 export interface EncounterPlan {
   id: string;
@@ -67,6 +118,12 @@ export interface EncounterPlan {
   /** Capitolo dell'avventura a cui appartiene, per raggrupparli. */
   chapter?: string;
   entries: PlanEntry[];
+  /** Tesoro che finisce nel bottino quando l'incontro parte. */
+  treasure?: TreasureItem[];
+  /** Note dell'avventura (tattiche, cosa succede se...), mostrate al Master durante il combattimento. */
+  notes?: AdventureNote[];
+  /** Da dove viene, se importato da un'avventura. */
+  source?: { chapterId: string; index: number };
 }
 
 /** Un foglio che il Master mostra ai giocatori: una lettera, una mappa, un ritratto. */
@@ -187,6 +244,18 @@ export interface Repository {
   /** Solo il Master: i suoi appunti riservati, per id di sessione. */
   watchSessionSecrets(campaignId: string, cb: (notes: Record<string, string>) => void): Unsubscribe;
   saveSessionSecrets(campaignId: string, notes: Record<string, string>): Promise<void>;
+  /** Solo il Master: il bottino ancora da consegnare. */
+  watchLoot(campaignId: string, cb: (items: LootItem[]) => void): Unsubscribe;
+  saveLoot(campaignId: string, items: LootItem[]): Promise<void>;
+  /** Solo il Master: l'avventura (meta = null se non c'è). */
+  watchAdventure(campaignId: string, cb: (meta: AdventureMeta | null, chapters: AdventureChapter[]) => void): Unsubscribe;
+  saveAdventureMeta(campaignId: string, meta: AdventureMeta): Promise<void>;
+  saveAdventureChapter(campaignId: string, chapter: AdventureChapter): Promise<void>;
+  /** Toglie i capitoli indicati e, se whole, anche la scheda dell'avventura. */
+  deleteAdventure(campaignId: string, chapterIds: string[], whole: boolean): Promise<void>;
+  /** Solo il Master: le note degli incontri in corso. */
+  watchCombatNotes(campaignId: string, cb: (notes: AdventureNote[]) => void): Unsubscribe;
+  saveCombatNotes(campaignId: string, notes: AdventureNote[]): Promise<void>;
   watchHomebrew(campaignId: string, cb: (h: Homebrew | null) => void): Unsubscribe;
   /** Solo il Master. */
   saveHomebrew(campaignId: string, homebrew: Homebrew): Promise<void>;

@@ -13,6 +13,7 @@ import { useNavigate } from "react-router";
 import { AutomationSwitch } from "../components/AutomationSwitch";
 import { ABILITY_NAMES, SPECIES_LABEL, registry } from "../content";
 import { repo } from "../data";
+import { backgroundFits } from "../data/backgroundsByClass";
 import { useAuth } from "../firebase/auth";
 import { useUserAutomation } from "../state/useCharacter";
 
@@ -32,8 +33,11 @@ export function NewCharacter() {
   const [pref] = useUserAutomation();
   const [name, setName] = useState("");
   const [speciesId, setSpecies] = useState((SPECIES.find((s) => s.id === "human") ?? SPECIES[0]!).id);
-  const [backgroundId, setBackground] = useState(BACKGROUNDS[0]!.id);
   const [classId, setClass] = useState(CLASSES[0]!.id);
+  // Si propongono solo i background adatti alla classe scelta.
+  const backgrounds = useMemo(() => BACKGROUNDS.filter((b) => backgroundFits(b.id, classId)), [classId]);
+  const [chosenBackground, setBackground] = useState("");
+  const backgroundId = backgrounds.some((b) => b.id === chosenBackground) ? chosenBackground : backgrounds[0]!.id;
   const [method, setMethod] = useState<Method>("standard");
   const [standard, setStandard] = useState<Partial<Record<Ability, number>>>({});
   const [scores, setScores] = useState<Record<Ability, number>>(EMPTY);
@@ -119,7 +123,14 @@ export function NewCharacter() {
           </label>
           <label className="field">
             <span>Classe</span>
-            <select value={classId} onChange={(e) => setClass(e.currentTarget.value)}>
+            <select
+              value={classId}
+              onChange={(e) => {
+                setClass(e.currentTarget.value);
+                setPlus1("");
+                setPlus2("");
+              }}
+            >
               {CLASSES.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name} ({s.hitDie})
@@ -128,7 +139,9 @@ export function NewCharacter() {
             </select>
           </label>
           <label className="field">
-            <span>Background</span>
+            <span>
+              Background <span className="muted small">({backgrounds.length} adatti)</span>
+            </span>
             <select
               value={backgroundId}
               onChange={(e) => {
@@ -137,9 +150,10 @@ export function NewCharacter() {
                 setPlus2("");
               }}
             >
-              {BACKGROUNDS.map((s) => (
+              {backgrounds.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.name}
+                  {s.source ? ` · ${s.source.replace(/ p\. \d+.*$/, "")}` : ""}
                 </option>
               ))}
             </select>

@@ -263,6 +263,7 @@ export function InitiativePanel({ campaignId, party, isDm, uid }: { campaignId: 
   };
   const end = () => {
     setEnding(false);
+    repo.saveCombatNotes(campaignId, []).catch(failed);
     save({ active: false, round: 1, monsters: [] });
     saveSecrets({});
     for (const ch of party) if (ch.state.initiative != null) setPcInitiative(ch, null);

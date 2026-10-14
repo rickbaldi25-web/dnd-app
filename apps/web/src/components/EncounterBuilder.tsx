@@ -1,8 +1,9 @@
 import { crXp, rateEncounter, type CharacterData, type EncounterDifficulty } from "@dnd/engine";
 import { useEffect, useState } from "react";
-import { repo, type Encounter, type EncounterPlan, type MonsterSecret, type PlanEntry } from "../data";
+import { repo, type AdventureNote, type Encounter, type EncounterPlan, type LootItem, type MonsterSecret, type PlanEntry } from "../data";
 import { useLog } from "../state/log";
 import { AddMonster, useEncounter, withMonsters } from "./Initiative";
+import { TreasureEditor, withTreasure } from "./Loot";
 
 const DIFFICULTY: Record<EncounterDifficulty, string> = { trivial: "Banale", easy: "Facile", medium: "Medio", hard: "Difficile", deadly: "Mortale" };
 const pe = (n: number) => n.toLocaleString("it-IT");
@@ -17,14 +18,20 @@ function matchesPlan(plan: EncounterPlan, query: string, chapter: string): boole
 }
 
 /** Porta i mostri di un incontro preparato in combattimento: lo apre se non ce n'è uno, altrimenti li aggiunge. */
-function startPlan(campaignId: string, encounter: Encounter | null, secrets: Record<string, MonsterSecret>, plan: EncounterPlan): Promise<unknown> {
+export function startPlan(campaignId: string, encounter: Encounter | null, secrets: Record<string, MonsterSecret>, plan: EncounterPlan, loot: LootItem[], combatNotes: AdventureNote[] = []): Promise<unknown> {
   const running = encounter?.active ? encounter : { active: true, round: 1, monsters: [] };
   const next = withMonsters(
     running,
     encounter?.active ? secrets : {},
     plan.entries.map((e) => ({ monster: { name: e.name, hp: e.hp, ac: e.ac, bonus: e.initiativeBonus, ...(e.monsterId ? { monsterId: e.monsterId } : {}), ...(e.cr ? { cr: e.cr } : {}) }, count: e.count })),
   );
-  return Promise.all([repo.saveEncounter(campaignId, next.encounter), repo.saveMonsterSecrets(campaignId, next.secrets)]);
+  return Promise.all([
+    repo.saveEncounter(campaignId, next.encounter),
+    repo.saveMonsterSecrets(campaignId, next.secrets),
+    ...(plan.treasure?.length ? [repo.saveLoot(campaignId, withTreasure(loot, plan.treasure))] : []),
+    // Le note si sommano a quelle già in corso se l'incontro si aggiunge a un combattimento aperto.
+    ...(plan.notes?.length ? [repo.saveCombatNotes(campaignId, [...(encounter?.active ? combatNotes : []), ...plan.notes.map((n) => ({ ...n, title: `${plan.name}: ${n.title}` }))])] : []),
+  ]);
 }
 
 /**
@@ -35,7 +42,9 @@ export function QuickEncounters({ campaignId, party, onPrepare }: { campaignId: 
   const { push } = useLog();
   const encounter = useEncounter(campaignId);
   const [plans, setPlans] = useState<EncounterPlan[]>([]);
+  const [loot, setLoot] = useState<LootItem[]>([]);
   useEffect(() => repo.watchEncounterPlans(campaignId, setPlans), [campaignId]);
+  useEffect(() => repo.watchLoot(campaignId, setLoot), [campaignId]);
   const failed = (e: unknown) => push({ title: "Salvataggio non riuscito", lines: [String(e instanceof Error ? e.message : e)], tone: "bad" });
   const levels = party.map((ch) => Math.max(1, ch.levels.length));
   const [query, setQuery] = useState("");
@@ -82,7 +91,7 @@ export function QuickEncounters({ campaignId, party, onPrepare }: { campaignId: 
                 className="btn btn-primary"
                 onClick={() => {
                   // In questo riquadro non c'è mai un combattimento in corso: si parte da zero.
-                  startPlan(campaignId, encounter, {}, plan).catch(failed);
+                  startPlan(campaignId, encounter, {}, plan, loot).catch(failed);
                   push({ title: `${plan.name}: mostri in combattimento`, lines: plan.entries.map((e) => `${e.count} × ${e.name}`), rolls: [] });
                 }}
               >
@@ -111,7 +120,11 @@ export function EncounterBuilder({ campaignId, party, onLaunch }: { campaignId: 
   const [chapterFilter, setChapterFilter] = useState("");
   const [difficulty, setDifficulty] = useState<EncounterDifficulty | "">("");
   const [closed, setClosed] = useState<string[]>([]);
+  const [loot, setLoot] = useState<LootItem[]>([]);
+  const [combatNotes, setCombatNotes] = useState<AdventureNote[]>([]);
+  useEffect(() => repo.watchCombatNotes(campaignId, setCombatNotes), [campaignId]);
   useEffect(() => repo.watchEncounterPlans(campaignId, setPlans), [campaignId]);
+  useEffect(() => repo.watchLoot(campaignId, setLoot), [campaignId]);
   useEffect(() => repo.watchMonsterSecrets(campaignId, setSecrets), [campaignId]);
 
   const failed = (e: unknown) => push({ title: "Salvataggio non riuscito", lines: [String(e instanceof Error ? e.message : e)], tone: "bad" });
@@ -137,7 +150,7 @@ export function EncounterBuilder({ campaignId, party, onLaunch }: { campaignId: 
     setOpenId(id);
   };
   const launch = (plan: EncounterPlan) => {
-    startPlan(campaignId, encounter, secrets, plan).catch(failed);
+    startPlan(campaignId, encounter, secrets, plan, loot, combatNotes).catch(failed);
     push({ title: `${plan.name}: mostri in combattimento`, lines: plan.entries.map((e) => `${e.count} × ${e.name}`), rolls: [] });
     onLaunch?.();
   };
@@ -274,6 +287,15 @@ export function EncounterBuilder({ campaignId, party, onLaunch }: { campaignId: 
                       {unrated > 0 && <span className="muted"> {unrated === 1 ? "Un mostro è" : `${unrated} mostri sono`} senza grado di sfida e non entrano nel conto.</span>}
                     </p>
                   )}
+                  {plan.notes?.map((n, i) => (
+                    <details key={i} className="adventure-note">
+                      <summary>
+                        <span>{n.title || "Nota"}</span>
+                      </summary>
+                      <p className="handout-text">{n.text}</p>
+                    </details>
+                  ))}
+                  <TreasureEditor items={plan.treasure ?? []} onChange={(treasure) => patch(plan.id, { treasure })} />
                   <AddMonster
                     withCr
                     onAdd={(m, count) => {

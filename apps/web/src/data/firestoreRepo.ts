@@ -21,7 +21,7 @@ import {
   writeBatch,
   type Firestore,
 } from "firebase/firestore";
-import { newCampaignCode, type Campaign, type Encounter, type EncounterPlan, type Handout, type Homebrew, type MonsterSecret, type Presence, type SessionNote, type SharedRoll, type Repository, type UserPrefs } from "./repository";
+import { newCampaignCode, type AdventureChapter, type AdventureMeta, type AdventureNote, type Campaign, type Encounter, type EncounterPlan, type Handout, type Homebrew, type LootItem, type MonsterSecret, type Presence, type SessionNote, type SharedRoll, type Repository, type UserPrefs } from "./repository";
 
 /** Toglie i campi tecnici di Firestore prima di passare il personaggio al motore. */
 function toCharacter(id: string, data: Record<string, unknown>): CharacterData {
@@ -167,6 +167,42 @@ export function firestoreRepo(db: Firestore): Repository {
     },
     async saveSessionSecrets(campaignId, notes) {
       await setDoc(doc(db, "campaigns", campaignId, "secret", "notes"), { bySession: notes });
+    },
+    watchLoot(campaignId, cb) {
+      return onSnapshot(doc(db, "campaigns", campaignId, "secret", "loot"), (d) => cb((d.data()?.items as LootItem[]) ?? []), () => cb([]));
+    },
+    async saveLoot(campaignId, items) {
+      await setDoc(doc(db, "campaigns", campaignId, "secret", "loot"), { items });
+    },
+    watchAdventure(campaignId, cb) {
+      return onSnapshot(
+        collection(db, "campaigns", campaignId, "adventure"),
+        (snap) => {
+          const meta = snap.docs.find((d) => d.id === "_meta");
+          const chapters = snap.docs.filter((d) => d.id !== "_meta").map((d) => ({ ...(d.data() as Omit<AdventureChapter, "id">), id: d.id }));
+          cb(meta ? (meta.data() as AdventureMeta) : null, chapters.sort((a, b) => a.order - b.order));
+        },
+        () => cb(null, []),
+      );
+    },
+    async saveAdventureMeta(campaignId, meta) {
+      await setDoc(doc(db, "campaigns", campaignId, "adventure", "_meta"), meta);
+    },
+    async saveAdventureChapter(campaignId, chapter) {
+      const { id, ...data } = chapter;
+      await setDoc(doc(db, "campaigns", campaignId, "adventure", id), data);
+    },
+    async deleteAdventure(campaignId, chapterIds, whole) {
+      const batch = writeBatch(db);
+      for (const id of chapterIds) batch.delete(doc(db, "campaigns", campaignId, "adventure", id));
+      if (whole) batch.delete(doc(db, "campaigns", campaignId, "adventure", "_meta"));
+      await batch.commit();
+    },
+    watchCombatNotes(campaignId, cb) {
+      return onSnapshot(doc(db, "campaigns", campaignId, "secret", "combat-notes"), (d) => cb((d.data()?.notes as AdventureNote[]) ?? []), () => cb([]));
+    },
+    async saveCombatNotes(campaignId, notes) {
+      await setDoc(doc(db, "campaigns", campaignId, "secret", "combat-notes"), { notes });
     },
     watchHomebrew(campaignId, cb) {
       return onSnapshot(doc(db, "campaigns", campaignId, "state", "homebrew"), (d) => cb(d.exists() ? { items: d.data().items ?? [], spells: d.data().spells ?? [] } : null), () => cb(null));

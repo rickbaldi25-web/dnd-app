@@ -4,9 +4,11 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { EncounterBuilder, QuickEncounters } from "../components/EncounterBuilder";
 import { HandoutsPanel } from "../components/Handouts";
 import { HomebrewPanel } from "../components/Homebrew";
+import { AdventurePanel } from "../components/Adventure";
 import { Badge, CampaignDrawer } from "../components/CampaignSide";
 import { CombatView } from "../components/CombatView";
 import { useEncounter } from "../components/Initiative";
+import { LootPanel } from "../components/Loot";
 import { PartyCard, PartyGlance } from "../components/PartyCard";
 import { RollLog } from "../components/RollLog";
 import { SessionNotes } from "../components/SessionNotes";
@@ -63,7 +65,7 @@ export function Campaign() {
   const tabs = [
     ...(fighting ? [{ id: "combattimento", label: "Combattimento" }] : []),
     { id: "tavolo", label: "Esplorazione" },
-    ...(isDm ? [{ id: "incontri", label: "Incontri", prep: true }] : []),
+    ...(isDm ? [{ id: "incontri", label: "Incontri", prep: true }, { id: "avventura", label: "Avventura" }] : []),
     { id: "diario", label: "Diario", prep: !isDm },
     { id: "contenuti", label: "Contenuti" },
     { id: "gestione", label: "Gestione" },
@@ -199,6 +201,7 @@ export function Campaign() {
 
           <aside className="campaign-aside">
             {isDm && !fighting && <QuickEncounters campaignId={campaign.id} party={party} onPrepare={() => go("incontri")} />}
+            {isDm && !fighting && <LootPanel campaignId={campaign.id} party={party} />}
 
             {tab !== "combattimento" && <RollLog campaignId={campaign.id} isDm={isDm} />}
 
@@ -210,6 +213,12 @@ export function Campaign() {
       {isDm && (
         <div role="tabpanel" id="pannello-incontri" aria-labelledby="tab-incontri" className="tab-panel" hidden={tab !== "incontri"}>
           <EncounterBuilder campaignId={campaign.id} party={party} onLaunch={() => setParams({})} />
+        </div>
+      )}
+
+      {isDm && (
+        <div role="tabpanel" id="pannello-avventura" aria-labelledby="tab-avventura" className="tab-panel" hidden={tab !== "avventura"}>
+          <AdventurePanel campaignId={campaign.id} party={party} onLaunched={() => setParams({})} />
         </div>
       )}
 

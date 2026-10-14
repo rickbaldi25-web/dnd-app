@@ -1,5 +1,5 @@
 import { applyFieldChanges, diffFields, type CharacterData } from "@dnd/engine";
-import { newCampaignCode, type Campaign, type Encounter, type EncounterPlan, type Handout, type Homebrew, type MonsterSecret, type Presence, type SessionNote, type SharedRoll, type Repository, type UserPrefs } from "./repository";
+import { newCampaignCode, type AdventureChapter, type AdventureMeta, type AdventureNote, type Campaign, type Encounter, type EncounterPlan, type Handout, type Homebrew, type LootItem, type MonsterSecret, type Presence, type SessionNote, type SharedRoll, type Repository, type UserPrefs } from "./repository";
 
 const KEY = "dnd.characters.v1";
 const PREFS = "dnd.prefs.v1";
@@ -9,7 +9,7 @@ const presences = new Map<string, Presence[]>();
 /** Tiri condivisi: in memoria, in modalità locale servono solo a provare il riquadro. */
 const sharedRolls = new Map<string, SharedRoll[]>();
 const ENCOUNTERS = "dnd.encounters.v1";
-type StoredEncounter = { encounter?: Encounter; secrets?: Record<string, MonsterSecret>; homebrew?: Homebrew; plans?: EncounterPlan[]; handouts?: Handout[]; sessions?: SessionNote[]; sessionSecrets?: Record<string, string> };
+type StoredEncounter = { encounter?: Encounter; secrets?: Record<string, MonsterSecret>; homebrew?: Homebrew; plans?: EncounterPlan[]; handouts?: Handout[]; sessions?: SessionNote[]; sessionSecrets?: Record<string, string>; loot?: LootItem[]; adventure?: AdventureMeta | null; chapters?: Record<string, AdventureChapter>; combatNotes?: AdventureNote[] };
 
 function readEncounters(): Record<string, StoredEncounter> {
   try {
@@ -210,6 +210,44 @@ export const localRepo: Repository = {
   },
   async saveSessionSecrets(campaignId, notes) {
     writeEncounter(campaignId, { sessionSecrets: notes });
+  },
+  watchLoot(campaignId, cb) {
+    const emit = () => cb(readEncounters()[campaignId]?.loot ?? []);
+    listeners.add(emit);
+    emit();
+    return () => listeners.delete(emit);
+  },
+  async saveLoot(campaignId, items) {
+    writeEncounter(campaignId, { loot: items });
+  },
+  watchAdventure(campaignId, cb) {
+    const emit = () => {
+      const all = readEncounters()[campaignId];
+      cb(all?.adventure ?? null, Object.values(all?.chapters ?? {}).sort((a, b) => a.order - b.order));
+    };
+    listeners.add(emit);
+    emit();
+    return () => listeners.delete(emit);
+  },
+  async saveAdventureMeta(campaignId, meta) {
+    writeEncounter(campaignId, { adventure: meta });
+  },
+  async saveAdventureChapter(campaignId, chapter) {
+    writeEncounter(campaignId, { chapters: { ...readEncounters()[campaignId]?.chapters, [chapter.id]: chapter } });
+  },
+  async deleteAdventure(campaignId, chapterIds, whole) {
+    const chapters = { ...readEncounters()[campaignId]?.chapters };
+    for (const id of chapterIds) delete chapters[id];
+    writeEncounter(campaignId, { chapters, ...(whole ? { adventure: null } : {}) });
+  },
+  watchCombatNotes(campaignId, cb) {
+    const emit = () => cb(readEncounters()[campaignId]?.combatNotes ?? []);
+    listeners.add(emit);
+    emit();
+    return () => listeners.delete(emit);
+  },
+  async saveCombatNotes(campaignId, notes) {
+    writeEncounter(campaignId, { combatNotes: notes });
   },
   watchHomebrew(campaignId, cb) {
     const emit = () => cb(readEncounters()[campaignId]?.homebrew ?? null);

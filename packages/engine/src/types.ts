@@ -624,6 +624,9 @@ export interface SpellSelection {
   spellbook?: string[];
 }
 
+/** Monete: platino, oro, electrum, argento, rame. */
+export type Coin = "pp" | "gp" | "ep" | "sp" | "cp";
+
 export interface CharacterData {
   schemaVersion: 1;
   id: string;
@@ -643,6 +646,8 @@ export interface CharacterData {
   /** Incantesimi scelti: chiave = id della classe da incantatore. */
   spells?: Record<string, SpellSelection>;
   equipment: EquipmentEntry[];
+  /** Borsello. */
+  coins?: Partial<Record<Coin, number>>;
   state: CharacterState;
   settings: { automation?: AutomationLevel };
   /** Valori forzati a mano (es. "ac", "hp.max", "skill.stealth"). Ignorati in modalità "full". */

@@ -1,11 +1,34 @@
 import type { CharacterData, MonsterDef } from "@dnd/engine";
 import { useEffect, useState } from "react";
 import { loadMonsters } from "../content";
-import { repo, type MonsterSecret } from "../data";
+import { repo, type AdventureNote, type MonsterSecret } from "../data";
 import { initiativeOrder, InitiativePanel, useEncounter } from "./Initiative";
+import { LootPanel } from "./Loot";
 import { MonsterStatBlock } from "./MonsterStatBlock";
 import { PartyCard, PartyStrip } from "./PartyCard";
 import { RollLog } from "./RollLog";
+
+/** Le note dell'avventura per gli incontri in corso: tattiche, cosa succede se... */
+function CombatNotes({ campaignId }: { campaignId: string }) {
+  const [notes, setNotes] = useState<AdventureNote[]>([]);
+  useEffect(() => repo.watchCombatNotes(campaignId, setNotes), [campaignId]);
+  if (!notes.length) return null;
+  return (
+    <section className="panel combat-notes">
+      <h2>Note dell'incontro</h2>
+      <div className="feature-list">
+        {notes.map((n, i) => (
+          <details key={i} open={notes.length <= 2}>
+            <summary>
+              <span>{n.title}</span>
+            </summary>
+            <p className="handout-text">{n.text}</p>
+          </details>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 /**
  * La campagna durante un combattimento: il gruppo in una riga, l'iniziativa,
@@ -48,6 +71,8 @@ export function CombatView({ campaignId, party, isDm, uid, online, showRolls }: 
             {current?.kind === "monster" && !isDm && <p className="spotlight-name">{current.name}</p>}
             {current?.kind === "monster" && isDm && (statBlock ? <MonsterStatBlock monster={statBlock} name={current.name} /> : <p className="muted small">{!monsterId ? `${current.name}: aggiunto a mano, senza scheda.` : library ? "Scheda non trovata nella raccolta." : "Carico la scheda…"}</p>)}
           </section>
+          {isDm && <CombatNotes campaignId={campaignId} />}
+          {isDm && <LootPanel campaignId={campaignId} party={party} />}
           {showRolls && <RollLog campaignId={campaignId} isDm={isDm} />}
         </div>
       </div>

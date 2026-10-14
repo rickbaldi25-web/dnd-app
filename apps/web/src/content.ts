@@ -126,6 +126,8 @@ export const TIMING: Record<string, string> = {
 export const ftToM = (ft: number) => `${((ft / 5) * 1.5).toLocaleString("it-IT")} m`;
 
 export function itemName(id: string): string {
+  // Oggetti fuori dai manuali, consegnati dal bottino: l'id è "custom:" seguito dal nome.
+  if (id.startsWith("custom:")) return id.slice(7);
   return registry.items.get(id)?.name ?? id;
 }
 export function skillName(id: string): string {

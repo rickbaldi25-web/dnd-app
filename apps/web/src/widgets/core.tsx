@@ -11,12 +11,15 @@ import {
   setToggle,
   shortRest,
   useAction as runAction,
+  type Coin,
   type Die,
   type RollMode,
   type Stat,
 } from "@dnd/engine";
 import { createContext, useContext, useEffect, useState } from "react";
 import { ABILITY_NAMES, CONDITIONS, DAMAGE_TYPES, SENSES, TIMING, ftToM, isHomebrew, itemName, registry } from "../content";
+import { COINS, ItemSearch } from "../components/ItemSearch";
+import { giveTo } from "../components/Loot";
 import { useLog } from "../state/log";
 import type { CharacterController } from "../state/useCharacter";
 import type { WidgetProps } from "./registry";
@@ -712,9 +715,39 @@ export function FeaturesWidget({ c }: WidgetProps) {
   );
 }
 
-export function InventoryWidget({ c }: WidgetProps) {
-  const [add, setAdd] = useState("");
-  const items = [...registry.items.values()].filter((i) => i.kind !== "gear" || isHomebrew(i.id)).sort((a, b) => a.name.localeCompare(b.name, "it"));
+/** Borsello: un campo per moneta, si salva uscendo dal campo. */
+function Purse({ c }: WidgetProps) {
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  const value = (coin: Coin) => draft[coin] ?? String(c.ch.coins?.[coin] ?? 0);
+  const commit = (coin: Coin) => {
+    const text = draft[coin];
+    if (text === undefined) return;
+    const n = Math.max(0, Math.floor(Number(text) || 0));
+    if (n !== (c.ch.coins?.[coin] ?? 0)) c.update((ch) => ({ ...ch, coins: { ...ch.coins, [coin]: n } }));
+    setDraft(({ [coin]: _done, ...rest }) => rest);
+  };
+  return (
+    <div className="purse" role="group" aria-label="Borsello">
+      {COINS.map((coin) => (
+        <label key={coin.id} title={coin.name}>
+          <span>{coin.short}</span>
+          <input
+            type="number"
+            min={0}
+            inputMode="numeric"
+            value={value(coin.id)}
+            aria-label={coin.name}
+            onChange={(e) => setDraft({ ...draft, [coin.id]: e.currentTarget.value })}
+            onBlur={() => commit(coin.id)}
+            onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+          />
+        </label>
+      ))}
+    </div>
+  );
+}
+
+export function InventoryWidget({ c, w }: WidgetProps) {
   const setEq = (idx: number, patch: Partial<(typeof c.ch.equipment)[number]> | null) =>
     c.update((ch) => {
       const equipment = [...ch.equipment];
@@ -724,7 +757,8 @@ export function InventoryWidget({ c }: WidgetProps) {
     });
   return (
     <Panel title="Inventario" className="inventory-panel">
-      {c.ch.equipment.length === 0 && <p className="muted">Nessun oggetto. Aggiungine uno qui sotto.</p>}
+      <Purse c={c} w={w} />
+      {c.ch.equipment.length === 0 && <p className="muted">Nessun oggetto. Cercane uno qui sotto.</p>}
       <ul className="inv-list">
         {c.ch.equipment.map((e, i) => (
           <li key={`${e.itemId}-${i}`}>
@@ -739,27 +773,8 @@ export function InventoryWidget({ c }: WidgetProps) {
           </li>
         ))}
       </ul>
-      <div className="row">
-        <select value={add} onChange={(e) => setAdd(e.currentTarget.value)} aria-label="Oggetto da aggiungere">
-          <option value="">Aggiungi oggetto…</option>
-          {items.map((i) => (
-            <option key={i.id} value={i.id}>
-              {i.name}
-            </option>
-          ))}
-        </select>
-        <button
-          className="btn"
-          disabled={!add}
-          onClick={() => {
-            c.update((ch) => ({ ...ch, equipment: [...ch.equipment, { itemId: add }] }));
-            setAdd("");
-          }}
-        >
-          Aggiungi
-        </button>
-      </div>
-      <p className="muted small">Spunta un oggetto per indossarlo o impugnarlo.</p>
+      <ItemSearch allowCustom allowCoins label="Aggiungi all'inventario" onPick={(p) => c.update((ch) => giveTo(ch, p))} />
+      <p className="muted small">Spunta un oggetto per indossarlo o impugnarlo. Scrivendo «30 mo» le monete vanno nel borsello.</p>
     </Panel>
   );
 }
