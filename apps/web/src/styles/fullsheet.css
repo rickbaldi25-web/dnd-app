@@ -281,18 +281,33 @@ input.diamond:disabled {
   gap: var(--gap);
   align-items: start;
 }
+/* Le sei caratteristiche in fila, tutte alte uguali: i cerchi dei modificatori restano allineati. */
 .fs-abilities {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--gap);
-  align-items: start;
+  align-items: stretch;
 }
-.fs-col {
+.fs-columns {
   display: grid;
   gap: var(--gap);
+  align-items: start;
 }
-.fs-abilities .fs-training {
-  grid-column: 1 / -1;
+.fs-left {
+  display: grid;
+  gap: var(--gap);
+  min-width: 0;
+}
+.fs-cond-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+  margin: 0.5rem 0;
+}
+.fs-cond-row select {
+  width: auto;
+  min-height: 34px;
 }
 .fs-ability {
   padding: 0.55rem 0.7rem 0.4rem;
@@ -403,6 +418,9 @@ input.diamond:disabled {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--gap);
 }
+.fs-stat.is-on {
+  border-color: var(--copper);
+}
 .fs-traits {
   grid-column: 1 / -1;
   display: flex;
@@ -468,8 +486,9 @@ input.diamond:disabled {
 }
 
 @media (min-width: 700px) {
-  .fs-strip {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+  .fs-strip,
+  .fs-abilities {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 @media (min-width: 900px) {
@@ -478,11 +497,12 @@ input.diamond:disabled {
   }
 }
 @media (min-width: 1100px) {
-  .fs-page-1 {
-    grid-template-columns: minmax(400px, 0.9fr) minmax(0, 2fr);
+  .fs-strip,
+  .fs-abilities {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
-  .fs-page-2 {
-    grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
+  .fs-columns {
+    grid-template-columns: minmax(340px, 1fr) minmax(0, 2fr);
   }
 }
 
@@ -620,9 +640,40 @@ input.diamond:disabled {
   margin-top: 0.5rem;
 }
 
-/* Su telefono e tablet prima ciò che serve giocando (attacchi, moduli di classe), poi le caratteristiche. */
-@media (max-width: 1099px) {
-  .fs-page-1 .fs-main {
-    order: -1;
+/* Pagina 2 in orizzontale: incantatore e slot affiancati, poi righe di riquadri. */
+.fs-spell-top,
+.fs-row-3,
+.fs-row-gear {
+  display: grid;
+  gap: var(--gap);
+  align-items: start;
+}
+.fs-stack {
+  display: grid;
+  gap: var(--gap);
+}
+.fs-spell-top .fs-slots {
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  align-content: start;
+}
+@media (min-width: 900px) {
+  .fs-spell-top {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
+  .fs-row-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: stretch;
+  }
+  .fs-row-gear {
+    grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  }
+}
+/* Nella riga di tre i campi di testo riempiono il riquadro, così i bordi si allineano. */
+.fs-row-3 > .panel {
+  display: flex;
+  flex-direction: column;
+}
+.fs-row-3 .fs-text-box textarea {
+  flex: 1;
+  min-height: 7rem;
 }
