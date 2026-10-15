@@ -2,6 +2,7 @@ import { computeSheet, type AutomationLevel, type CharacterData } from "@dnd/eng
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { AutomationSwitch } from "../components/AutomationSwitch";
+import { Seal } from "../components/Seal";
 import { registry } from "../content";
 import { repo } from "../data";
 import { useAuth } from "../firebase/auth";
@@ -31,12 +32,16 @@ export function Characters() {
 
   return (
     <main className="page narrow">
-      <div className="row between">
-        <h1 className="page-title">I tuoi personaggi</h1>
+      <header className="home-head">
+        <Seal className="home-seal" />
+        <h1 className="page-title home-title">I tuoi personaggi</h1>
+        <div className="login-rule home-rule" aria-hidden="true">
+          <span />◆<span />
+        </div>
         <Link className="btn btn-primary" to="/new">
           Nuovo personaggio
         </Link>
-      </div>
+      </header>
 
       {list === null && <p className="muted">Caricamento…</p>}
       {list?.length === 0 && (

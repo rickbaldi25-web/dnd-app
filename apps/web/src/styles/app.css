@@ -1580,7 +1580,7 @@ body:has(.sheet.is-raging) {
   border-radius: 50%;
   border: 1px solid var(--rule, var(--line-strong));
 }
-.login-mark {
+.seal-mark {
   width: 132px;
   height: 132px;
   border-radius: 50%;

@@ -1463,15 +1463,17 @@ select option {
   left: 50%;
   translate: -50% 0;
 }
-.login-seal {
+.seal {
   position: relative;
   display: grid;
   place-items: center;
+}
+.login-seal {
   width: 210px;
   height: 210px;
   margin-bottom: 0.2rem;
 }
-.login-d20 {
+.seal-d20 {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -1479,7 +1481,7 @@ select option {
   color: var(--rule);
   opacity: 0.55;
 }
-.login-seal .login-mark {
+.login-seal .seal-mark {
   position: relative;
   width: 124px;
   height: 124px;
@@ -1532,4 +1534,50 @@ select option {
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--muted);
+}
+
+/* ---------------- Home ---------------- */
+
+/* Stessa intestazione dell'accesso, in piccolo: sigillo, titolo, filetto, pulsante */
+.home-head {
+  display: grid;
+  justify-items: center;
+  gap: 0.6rem;
+  margin: 0.6rem 0 1.6rem;
+  text-align: center;
+}
+.home-seal {
+  width: 116px;
+  height: 116px;
+}
+.home-seal .seal-mark {
+  position: relative;
+  width: 68px;
+  height: 68px;
+  margin: 0;
+  border: 2px solid var(--rule);
+  box-shadow:
+    0 0 0 3px var(--panel),
+    0 0 0 4px var(--rule);
+}
+.home-title {
+  margin: 0.2rem 0 0;
+  font-size: clamp(1.7rem, 7vw, 2.3rem);
+  line-height: 1.1;
+  letter-spacing: 0.04em;
+}
+.home-rule {
+  width: min(16rem, 70%);
+  margin-bottom: 0.4rem;
+}
+/* schede dei personaggi: filo d'oro a sinistra, la cornice si scalda al passaggio */
+.char-list .char-card {
+  border-left: 3px solid var(--rule);
+}
+.char-list .char-card:hover {
+  border-color: var(--rule);
+}
+.char-hp {
+  font-weight: 700;
+  color: var(--heading);
 }
