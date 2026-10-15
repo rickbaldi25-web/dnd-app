@@ -198,10 +198,10 @@ export function applyTranslations(pack: ContentPack, translations: Translation[]
     } else if (t.kind === "feat") {
       const feat = feats.get(t.id);
       if (feat) {
-        const nameEn = feat.name;
+        // Il nome inglese è quello di partenza, anche se un file precedente (il glossario) l'ha già tradotto.
+        feat.nameEn ??= feat.name;
         renameFeature(feat.feature, t);
         rename(feat, { ...t, description: undefined });
-        feat.nameEn = nameEn;
       }
       found = Boolean(feat);
     } else if (t.kind === "monster") {
