@@ -7,8 +7,11 @@ import {
   rollD20,
   setTempHp,
   type Ability,
+  type CustomFeature,
+  type Stat,
+  type ProficiencyKind,
 } from "@dnd/engine";
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import {
   ABILITY_NAMES,
   CONDITIONS,
@@ -24,6 +27,7 @@ import { useLog } from "../state/log";
 import type { CharacterController } from "../state/useCharacter";
 import {
   ActionRow,
+  EditModeContext,
   AttacksWidget,
   HitDiceWidget,
   InventoryWidget,
@@ -124,6 +128,191 @@ const toolName = (id: string) =>
 /* ------------------------------------------------------------------ */
 /* Intestazione                                                        */
 /* ------------------------------------------------------------------ */
+
+/* ------------------------------------------------------------------ */
+/* Correzioni a mano ("Correggi valori")                               */
+/* ------------------------------------------------------------------ */
+
+type Section = NonNullable<CustomFeature["section"]>;
+type SheetFeature = CharacterController["sheet"]["features"][number];
+
+/** Vero quando la scheda è in modalità correzione (mai in automazione completa). */
+function useEdit(c: CharacterController) {
+  return useContext(EditModeContext) && c.automation !== "full";
+}
+
+/** Aggiunge o toglie a mano una competenza: annulla prima la correzione opposta, se c'è. */
+function toggleProf(
+  c: CharacterController,
+  kind: ProficiencyKind,
+  id: string,
+  has: boolean,
+) {
+  c.update((ch) => {
+    const e = ch.proficiencyEdits ?? {};
+    const add = new Set(e.add?.[kind] ?? []);
+    const remove = new Set(e.remove?.[kind] ?? []);
+    if (has) {
+      if (add.has(id)) add.delete(id);
+      else remove.add(id);
+    } else if (remove.has(id)) remove.delete(id);
+    else add.add(id);
+    return {
+      ...ch,
+      proficiencyEdits: {
+        add: { ...e.add, [kind]: [...add] },
+        remove: { ...e.remove, [kind]: [...remove] },
+      },
+    };
+  });
+}
+
+/** Elenco di competenze modificabile: × toglie, ↺ rimette quelle tolte, il campo ne aggiunge di nuove. */
+function ProfEditor({
+  c,
+  kind,
+  items,
+  label,
+  placeholder,
+}: {
+  c: CharacterController;
+  kind: ProficiencyKind;
+  items: string[];
+  label: (id: string) => string;
+  placeholder: string;
+}) {
+  const [text, setText] = useState("");
+  const removed = c.ch.proficiencyEdits?.remove?.[kind] ?? [];
+  const add = () => {
+    const v = text.trim();
+    if (v && !items.includes(v)) toggleProf(c, kind, v, false);
+    setText("");
+  };
+  return (
+    <div className="fs-prof-edit">
+      {items.map((id) => (
+        <button
+          key={id}
+          className="chip is-on"
+          onClick={() => toggleProf(c, kind, id, true)}
+          aria-label={`Togli ${label(id)}`}
+        >
+          {label(id)} ×
+        </button>
+      ))}
+      {removed.map((id) => (
+        <button
+          key={id}
+          className="chip is-removed"
+          onClick={() => toggleProf(c, kind, id, true)}
+          title="Tolta a mano: tocca per rimetterla"
+        >
+          ↺ {label(id)}
+        </button>
+      ))}
+      <form
+        className="fs-prof-add"
+        onSubmit={(e) => {
+          e.preventDefault();
+          add();
+        }}
+      >
+        <input
+          value={text}
+          onChange={(e) => setText(e.currentTarget.value)}
+          placeholder={placeholder}
+          aria-label={placeholder}
+        />
+        <button className="btn" disabled={!text.trim()}>
+          Aggiungi
+        </button>
+      </form>
+    </div>
+  );
+}
+
+/** Modulo per scrivere o modificare un privilegio personalizzato. */
+function CustomFeatureForm({
+  c,
+  section,
+  feature,
+  onDone,
+}: {
+  c: CharacterController;
+  section: Section;
+  feature?: CustomFeature;
+  onDone: () => void;
+}) {
+  const [name, setName] = useState(feature?.name ?? "");
+  const [description, setDescription] = useState(feature?.description ?? "");
+  const save = () => {
+    const f: CustomFeature = {
+      ...feature,
+      id: feature?.id ?? `custom.${crypto.randomUUID().slice(0, 8)}`,
+      name: name.trim(),
+      description: description.trim(),
+      section,
+    };
+    c.update((ch) => {
+      const list = ch.customFeatures ?? [];
+      return {
+        ...ch,
+        customFeatures: list.some((x) => x.id === f.id)
+          ? list.map((x) => (x.id === f.id ? f : x))
+          : [...list, f],
+      };
+    });
+    onDone();
+  };
+  return (
+    <form
+      className="fs-custom-form"
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (name.trim()) save();
+      }}
+    >
+      <input
+        value={name}
+        onChange={(e) => setName(e.currentTarget.value)}
+        placeholder="Nome"
+        aria-label="Nome del privilegio"
+        autoFocus
+      />
+      <textarea
+        value={description}
+        onChange={(e) => setDescription(e.currentTarget.value)}
+        placeholder="Cosa fa (facoltativo)"
+        aria-label="Descrizione del privilegio"
+        rows={3}
+      />
+      <div className="row">
+        <button className="btn btn-primary" disabled={!name.trim()}>
+          {feature ? "Salva" : "Aggiungi"}
+        </button>
+        <button type="button" className="btn btn-quiet" onClick={onDone}>
+          Annulla
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function setDisabled(c: CharacterController, id: string, off: boolean) {
+  c.update((ch) => {
+    const set = new Set(ch.disabledFeatures ?? []);
+    if (off) set.add(id);
+    else set.delete(id);
+    return { ...ch, disabledFeatures: [...set] };
+  });
+}
+
+function removeCustom(c: CharacterController, id: string) {
+  c.update((ch) => ({
+    ...ch,
+    customFeatures: (ch.customFeatures ?? []).filter((x) => x.id !== id),
+  }));
+}
 
 function Identity({ c }: { c: CharacterController }) {
   const { ch, sheet } = c;
@@ -427,6 +616,30 @@ function AbilityBlock({ c, a }: { c: CharacterController; a: Ability }) {
     .filter(([, s]) => s.ability === a)
     .sort(([, x], [, y]) => x.name.localeCompare(y.name, "it"));
   const name = ABILITY_NAMES[a].name;
+  const edit = useEdit(c);
+  /** In correzione: pallino che aggiunge o toglie la competenza, numero modificabile, niente tiro. */
+  const editRow = (
+    kind: ProficiencyKind,
+    id: string,
+    label: string,
+    prof: boolean,
+    dot: string,
+    path: string,
+    stat: Stat,
+  ) => (
+    <div className="check-row is-editing">
+      <button
+        className={`prof-dot prof-dot-btn ${dot}`}
+        aria-pressed={prof}
+        aria-label={
+          prof ? `Togli competenza: ${label}` : `Aggiungi competenza: ${label}`
+        }
+        onClick={() => toggleProf(c, kind, id, prof)}
+      />
+      <span className="check-name">{label}</span>
+      <StatNumber c={c} path={path} s={stat} signed />
+    </div>
+  );
   return (
     <section className="fs-ability" aria-label={name}>
       <h3>{name}</h3>
@@ -440,59 +653,83 @@ function AbilityBlock({ c, a }: { c: CharacterController; a: Ability }) {
       </button>
       <ul className="check-list">
         <li className="fs-save">
-          <button
-            className="check-row"
-            onClick={() =>
-              roller(
-                `TS su ${name}`,
-                save.mod.value,
-                save.advantage ? "advantage" : "normal",
-              )
-            }
-          >
-            <span
-              className={`prof-dot ${save.proficient ? "is-prof" : ""}`}
-              aria-label={save.proficient ? "Competente" : "Non competente"}
-            />
-            <span className="check-name">Tiro salvezza</span>
-            {save.advantage && (
-              <span className="adv" title="Vantaggio">
-                V
-              </span>
-            )}
-            <StatNumber c={c} path={`save.${a}`} s={save.mod} signed />
-          </button>
-        </li>
-        {skills.map(([id, s]) => (
-          <li key={id}>
+          {edit ? (
+            editRow(
+              "saves",
+              a,
+              "Tiro salvezza",
+              save.proficient,
+              save.proficient ? "is-prof" : "",
+              `save.${a}`,
+              save.mod,
+            )
+          ) : (
             <button
               className="check-row"
               onClick={() =>
                 roller(
-                  s.name,
-                  s.mod.value,
-                  s.advantage ? "advantage" : "normal",
+                  `TS su ${name}`,
+                  save.mod.value,
+                  save.advantage ? "advantage" : "normal",
                 )
               }
             >
               <span
-                className={`prof-dot ${s.expertise ? "is-expert" : s.proficient ? "is-prof" : ""}`}
-                aria-label={
-                  s.expertise
-                    ? "Maestria"
-                    : s.proficient
-                      ? "Competente"
-                      : "Non competente"
-                }
+                className={`prof-dot ${save.proficient ? "is-prof" : ""}`}
+                aria-label={save.proficient ? "Competente" : "Non competente"}
               />
-              <span className="check-name">{s.name}</span>
-              {s.advantage && (
+              <span className="check-name">Tiro salvezza</span>
+              {save.advantage && (
                 <span className="adv" title="Vantaggio">
                   V
                 </span>
               )}
-              <StatNumber c={c} path={`skill.${id}`} s={s.mod} signed />
+              <StatNumber c={c} path={`save.${a}`} s={save.mod} signed />
             </button>
+          )}
+        </li>
+        {skills.map(([id, s]) => (
+          <li key={id}>
+            {edit ? (
+              editRow(
+                "skills",
+                id,
+                s.name,
+                s.proficient,
+                s.expertise ? "is-expert" : s.proficient ? "is-prof" : "",
+                `skill.${id}`,
+                s.mod,
+              )
+            ) : (
+              <button
+                className="check-row"
+                onClick={() =>
+                  roller(
+                    s.name,
+                    s.mod.value,
+                    s.advantage ? "advantage" : "normal",
+                  )
+                }
+              >
+                <span
+                  className={`prof-dot ${s.expertise ? "is-expert" : s.proficient ? "is-prof" : ""}`}
+                  aria-label={
+                    s.expertise
+                      ? "Maestria"
+                      : s.proficient
+                        ? "Competente"
+                        : "Non competente"
+                  }
+                />
+                <span className="check-name">{s.name}</span>
+                {s.advantage && (
+                  <span className="adv" title="Vantaggio">
+                    V
+                  </span>
+                )}
+                <StatNumber c={c} path={`skill.${id}`} s={s.mod} signed />
+              </button>
+            )}
           </li>
         ))}
       </ul>
@@ -531,13 +768,30 @@ function Training({ c }: { c: CharacterController }) {
     ["heavy", "pesante"],
     ["shield", "scudi"],
   ];
+  const edit = useEdit(c);
   return (
     <Panel title="Addestramento e competenze" className="fs-training">
       <p className="fs-armor" aria-label="Competenza nelle armature">
         {kinds.map(([k, label]) => {
           const has =
             all || armor.has(k) || (k === "shield" && armor.has("shields"));
-          return (
+          return edit ? (
+            <button
+              key={k}
+              className={`fs-armor-btn ${has ? "is-on" : ""}`}
+              aria-pressed={has}
+              onClick={() =>
+                toggleProf(
+                  c,
+                  "armor",
+                  k === "shield" && armor.has("shields") ? "shields" : k,
+                  has,
+                )
+              }
+            >
+              <span className="diamond-mark" aria-hidden /> {label}
+            </button>
+          ) : (
             <span key={k} className={has ? "is-on" : ""}>
               <span className="diamond-mark" aria-hidden /> {label}
             </span>
@@ -546,9 +800,37 @@ function Training({ c }: { c: CharacterController }) {
       </p>
       <dl className="fs-prof-list">
         <dt>Armi</dt>
-        <dd>{p.weapons.length ? p.weapons.map(weaponName).join(", ") : "—"}</dd>
+        <dd>
+          {edit ? (
+            <ProfEditor
+              c={c}
+              kind="weapons"
+              items={p.weapons}
+              label={weaponName}
+              placeholder="Es. Arco lungo"
+            />
+          ) : p.weapons.length ? (
+            p.weapons.map(weaponName).join(", ")
+          ) : (
+            "—"
+          )}
+        </dd>
         <dt>Strumenti</dt>
-        <dd>{p.tools.length ? p.tools.map(toolName).join(", ") : "—"}</dd>
+        <dd>
+          {edit ? (
+            <ProfEditor
+              c={c}
+              kind="tools"
+              items={p.tools}
+              label={toolName}
+              placeholder="Es. Arnesi da scasso"
+            />
+          ) : p.tools.length ? (
+            p.tools.map(toolName).join(", ")
+          ) : (
+            "—"
+          )}
+        </dd>
       </dl>
     </Panel>
   );
@@ -651,30 +933,119 @@ function StatStrip({
 }
 
 function FeatureBox({
+  c,
   title,
   list,
+  off = [],
+  section,
   className = "",
   empty,
 }: {
+  c: CharacterController;
   title: string;
-  list: CharacterController["sheet"]["features"];
+  list: SheetFeature[];
+  /** Privilegi tolti a mano: si vedono solo in modalità correzione, per rimetterli. */
+  off?: SheetFeature[];
+  /** Riquadro in cui finiscono i privilegi scritti a mano qui. */
+  section: Section;
   className?: string;
   empty: string;
 }) {
+  const edit = useEdit(c);
+  const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null);
+  const custom = (id: string) => c.ch.customFeatures?.find((x) => x.id === id);
   return (
     <Panel title={title} className={`fs-features ${className}`}>
-      {list.length === 0 && <p className="muted small">{empty}</p>}
+      {list.length === 0 && !edit && <p className="muted small">{empty}</p>}
       <div className="feature-list">
-        {list.map((f) => (
-          <details key={`${f.source}-${f.id}`}>
-            <summary>
-              <span>{f.name}</span>{" "}
-              <span className="muted small">{f.source}</span>
-            </summary>
-            {f.description && <RichText text={f.description} />}
-          </details>
-        ))}
+        {list.map((f) =>
+          editing === f.id ? (
+            <CustomFeatureForm
+              key={f.id}
+              c={c}
+              section={section}
+              feature={custom(f.id)}
+              onDone={() => setEditing(null)}
+            />
+          ) : (
+            <div key={`${f.source}-${f.id}`} className="fs-feature-row">
+              <details>
+                <summary>
+                  <span>{f.name}</span>{" "}
+                  <span className="muted small">{f.source}</span>
+                </summary>
+                {f.description && <RichText text={f.description} />}
+              </details>
+              {edit &&
+                (f.kind === "custom" ? (
+                  <span className="fs-feature-tools">
+                    <button
+                      className="link-btn"
+                      onClick={() => setEditing(f.id)}
+                    >
+                      Modifica
+                    </button>
+                    <button
+                      className="link-btn"
+                      onClick={() =>
+                        confirm(`Eliminare «${f.name}»?`) &&
+                        removeCustom(c, f.id)
+                      }
+                    >
+                      Elimina
+                    </button>
+                  </span>
+                ) : (
+                  <span className="fs-feature-tools">
+                    <button
+                      className="link-btn"
+                      onClick={() => setDisabled(c, f.id, true)}
+                      title="Non conta più: niente effetti, risorse né scelte. Si può rimettere."
+                    >
+                      Togli
+                    </button>
+                  </span>
+                ))}
+            </div>
+          ),
+        )}
+        {edit &&
+          off.map((f) => (
+            <div
+              key={`off-${f.source}-${f.id}`}
+              className="fs-feature-row is-off"
+            >
+              <span>
+                <s>{f.name}</s>{" "}
+                <span className="muted small">{f.source} · tolto</span>
+              </span>
+              <span className="fs-feature-tools">
+                <button
+                  className="link-btn"
+                  onClick={() => setDisabled(c, f.id, false)}
+                >
+                  Rimetti
+                </button>
+              </span>
+            </div>
+          ))}
       </div>
+      {edit &&
+        (adding ? (
+          <CustomFeatureForm
+            c={c}
+            section={section}
+            onDone={() => setAdding(false)}
+          />
+        ) : (
+          <button
+            className="btn btn-quiet fs-add-feature"
+            onClick={() => setAdding(true)}
+          >
+            + Aggiungi a mano
+          </button>
+        ))}
     </Panel>
   );
 }
@@ -815,15 +1186,24 @@ function Conditions({ c }: { c: CharacterController }) {
 }
 
 function PageCharacter({ c }: { c: CharacterController }) {
+  const edit = useEdit(c);
+  // I privilegi scritti a mano vanno nel riquadro scelto; quelli tolti si vedono solo in correzione.
+  const inSection = (x: SheetFeature): Section =>
+    x.kind === "custom"
+      ? (x.section ?? "feat")
+      : x.kind === "species"
+        ? "species"
+        : x.kind === "class"
+          ? "class"
+          : "feat";
+  // Le opzioni scelte (suppliche, manovre...) stanno già nei moduli di classe: qui solo i privilegi veri,
+  // salvo in correzione, dove servono tutte per poterle togliere.
+  const shown = (x: SheetFeature) =>
+    edit || x.kind !== "class" || !x.source.includes(": ");
+  const pick = (list: SheetFeature[], sec: Section) =>
+    list.filter((x) => inSection(x) === sec && shown(x));
   const f = c.sheet.features;
-  // Le opzioni scelte (suppliche, manovre...) stanno già nei moduli di classe: qui solo i privilegi veri.
-  const classFeatures = f.filter(
-    (x) => x.kind === "class" && !x.source.includes(": "),
-  );
-  const speciesTraits = f.filter((x) => x.kind === "species");
-  const feats = f.filter(
-    (x) => x.kind === "feat" || x.kind === "background" || x.kind === "custom",
-  );
+  const off = c.sheet.disabledFeatures;
   return (
     <div className="fs-page fs-page-1">
       <StatStrip c={c} />
@@ -844,20 +1224,29 @@ function PageCharacter({ c }: { c: CharacterController }) {
         <div className="fs-main">
           <AttacksWidget c={c} w={{ widget: "attacks" }} />
           <FeatureBox
+            c={c}
+            section="class"
+            off={pick(off, "class")}
             title="Privilegi di classe"
-            list={classFeatures}
+            list={pick(f, "class")}
             className="fs-class-features"
             empty="Nessun privilegio di classe."
           />
           <div className="fs-pair">
             <FeatureBox
+              c={c}
+              section="species"
+              off={pick(off, "species")}
               title={`Tratti della ${SPECIES_LABEL.toLowerCase()}`}
-              list={speciesTraits}
+              list={pick(f, "species")}
               empty="Nessun tratto."
             />
             <FeatureBox
+              c={c}
+              section="feat"
+              off={pick(off, "feat")}
               title="Talenti e background"
-              list={feats}
+              list={pick(f, "feat")}
               empty="Nessun talento."
             />
           </div>
@@ -1052,6 +1441,17 @@ function Attunement({ c }: { c: CharacterController }) {
 /** Le lingue calcolate dal motore; se mancano (spesso sono solo descritte), il testo dei tratti «Linguaggi». */
 function Languages({ c }: { c: CharacterController }) {
   const known = c.sheet.proficiencies.languages;
+  const edit = useEdit(c);
+  if (edit)
+    return (
+      <ProfEditor
+        c={c}
+        kind="languages"
+        items={known}
+        label={languageName}
+        placeholder="Es. Elfico"
+      />
+    );
   if (known.length) return <p>{known.map(languageName).join(", ")}</p>;
   const traits = c.sheet.features.filter(
     (f) =>

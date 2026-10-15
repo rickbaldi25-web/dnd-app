@@ -629,6 +629,17 @@ export interface SpellSelection {
 /** Monete: platino, oro, electrum, argento, rame. */
 export type Coin = "pp" | "gp" | "ep" | "sp" | "cp";
 
+/** Privilegio scritto a mano; `section` è il riquadro della scheda in cui compare (predefinito: talenti). */
+export interface CustomFeature extends Feature {
+  section?: "species" | "class" | "feat";
+}
+
+export type ProficiencyKind = "armor" | "weapons" | "tools" | "languages" | "skills" | "saves";
+export interface ProficiencyEdits {
+  add?: Partial<Record<ProficiencyKind, string[]>>;
+  remove?: Partial<Record<ProficiencyKind, string[]>>;
+}
+
 export interface CharacterData {
   schemaVersion: 1;
   id: string;
@@ -656,7 +667,12 @@ export interface CharacterData {
   settings: { automation?: AutomationLevel };
   /** Valori forzati a mano (es. "ac", "hp.max", "skill.stealth"). Ignorati in modalità "full". */
   overrides: Record<string, number>;
-  customFeatures?: Feature[];
+  /** Privilegi scritti a mano dal giocatore. */
+  customFeatures?: CustomFeature[];
+  /** Id dei privilegi tolti a mano: non contano più (niente effetti, risorse, scelte). Ignorati in modalità "full". */
+  disabledFeatures?: string[];
+  /** Competenze aggiunte o tolte a mano. Ignorate in modalità "full". */
+  proficiencyEdits?: ProficiencyEdits;
   portraitUrl?: string;
   notes?: string;
   /** Pagina 2 della scheda: allineamento, aspetto, storia e tratti caratteriali. */
@@ -687,6 +703,17 @@ export interface Issue {
   code: string;
   message: string;
   path?: string;
+}
+
+export interface ComputedFeature {
+  id: string;
+  name: string;
+  source: string;
+  kind: FeatureKind;
+  classId?: string;
+  description?: string;
+  /** Solo per i privilegi personalizzati: il riquadro in cui compaiono. */
+  section?: CustomFeature["section"];
 }
 
 /** Origine di un privilegio nella scheda. */
@@ -818,7 +845,9 @@ export interface ComputedSheet {
   resources: ComputedResource[];
   actions: ComputedAction[];
   toggles: { id: string; name: string; classId?: string; active: boolean; available: boolean }[];
-  features: { id: string; name: string; source: string; kind: FeatureKind; classId?: string; description?: string }[];
+  features: ComputedFeature[];
+  /** Privilegi tolti a mano: non contano, restano elencati per poterli rimettere. */
+  disabledFeatures: ComputedFeature[];
   pendingChoices: (ChoiceDef & { source: string; required: number; made: number })[];
   widgets: WidgetRef[];
   resistances: string[];

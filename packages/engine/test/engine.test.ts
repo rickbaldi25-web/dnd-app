@@ -354,3 +354,39 @@ describe("Dadi", () => {
     expect(r.total).toBe(r.rolls.reduce((a, x) => a + x.value, 0) + 2);
   });
 });
+
+describe("Correzioni a mano", () => {
+  const manual = (ch: CharacterData): CharacterData => ({ ...ch, settings: { automation: "manual" } });
+
+  it("un privilegio tolto perde i suoi effetti ma resta elencato per rimetterlo", () => {
+    const ch = { ...manual(makeBarbarian()), disabledFeatures: ["dwarf.toughness"] };
+    const s = sheetOf(ch);
+    expect(s.hpMax.value).toBe(12 + 2);
+    expect(s.features.some((f) => f.id === "dwarf.toughness")).toBe(false);
+    expect(s.disabledFeatures.map((f) => f.id)).toEqual(["dwarf.toughness"]);
+  });
+
+  it("i privilegi scritti a mano vanno nel riquadro scelto", () => {
+    const ch = { ...manual(makeBarbarian()), customFeatures: [{ id: "custom.a", name: "Benedizione del villaggio", section: "species" as const }] };
+    expect(sheetOf(ch).features.find((f) => f.id === "custom.a")).toMatchObject({ kind: "custom", section: "species" });
+  });
+
+  it("competenze aggiunte e tolte, maestria compresa", () => {
+    const ch = {
+      ...manual(makeBarbarian()),
+      proficiencyEdits: { add: { skills: ["stealth"], languages: ["elvish"], tools: ["thieves-tools"] }, remove: { skills: ["perception"] } },
+    };
+    const s = sheetOf(ch);
+    expect(s.skills.stealth!.proficient).toBe(true);
+    expect(s.skills.perception!.proficient).toBe(false);
+    expect(s.proficiencies.languages).toContain("elvish");
+    expect(s.proficiencies.tools).toContain("thieves-tools");
+  });
+
+  it("in automazione completa le correzioni non contano", () => {
+    const ch = { ...makeBarbarian(), settings: { automation: "full" as const }, disabledFeatures: ["dwarf.toughness"], proficiencyEdits: { add: { skills: ["stealth"] } } };
+    const s = sheetOf(ch);
+    expect(s.hpMax.value).toBe(12 + 2 + 1);
+    expect(s.skills.stealth!.proficient).toBe(false);
+  });
+});

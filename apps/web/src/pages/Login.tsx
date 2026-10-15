@@ -38,7 +38,7 @@ export function Login() {
         </button>
         {error && <p className="warn">{error}</p>}
         {useEmulators && <p className="muted small">Emulatore attivo: puoi creare un account Google di prova nella finestra che si apre.</p>}
-        <p className="login-foot">Quinta edizione · regole 2014</p>
+        <p className="login-foot">Fuori dalla mia palude bastardi</p>
       </div>
     </main>
   );

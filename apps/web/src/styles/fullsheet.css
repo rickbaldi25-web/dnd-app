@@ -734,3 +734,90 @@ input.diamond:disabled {
 .fs-save-btn:hover {
   border-color: var(--line-strong);
 }
+
+/* ---------------- Correzioni a mano ---------------- */
+
+/* Privilegi: la riga ha il testo a sinistra e i comandi a destra; il bordo passa dal details alla riga. */
+.fs-feature-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+.fs-feature-row:last-child {
+  border-bottom: 0;
+}
+.fs-feature-row > details,
+.fs-feature-row > span:first-child {
+  flex: 1;
+  min-width: 0;
+  border-bottom: 0;
+}
+.fs-feature-row.is-off {
+  padding: 0.5rem 0;
+  color: var(--muted);
+}
+.fs-feature-tools {
+  display: flex;
+  gap: 0.75rem;
+  flex: none;
+  font-size: 0.85rem;
+}
+.fs-add-feature {
+  margin-top: 0.5rem;
+}
+.fs-custom-form {
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+/* Competenze modificabili */
+.fs-prof-edit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.chip.is-removed {
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+.fs-prof-add {
+  display: flex;
+  gap: 6px;
+  flex: 1 1 14rem;
+}
+.fs-prof-add input {
+  flex: 1;
+  min-width: 0;
+}
+.fs-armor-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.15rem 0.45rem;
+  border: 1px dashed var(--line-strong);
+  border-radius: 8px;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+.fs-armor-btn.is-on {
+  color: var(--text);
+  font-weight: 700;
+}
+/* il pallino della competenza diventa un pulsante, con un'area da toccare più grande del disegno */
+.prof-dot-btn {
+  padding: 0;
+  min-height: 0;
+  cursor: pointer;
+  outline: 6px solid transparent;
+  border-style: dashed;
+}
+.prof-dot-btn.is-prof,
+.prof-dot-btn.is-expert {
+  border-style: solid;
+}

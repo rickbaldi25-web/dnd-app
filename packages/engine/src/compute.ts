@@ -14,11 +14,13 @@ import {
   type ComputedAttack,
   type ComputedResource,
   type ComputedSheet,
+  type CustomFeature,
   type Die,
   type Effect,
   type FeatDef,
   type Feature,
   type FeatureKind,
+  type ProficiencyKind,
   type Issue,
   type Part,
   type ShieldDef,
@@ -41,6 +43,7 @@ interface ActiveFeature {
   kind: FeatureKind;
   /** Classe a cui appartiene il privilegio (anche tramite la sottoclasse). */
   classId?: string;
+  section?: CustomFeature["section"];
 }
 
 /** Widget sempre presenti nella scheda, in ordine di default. */
@@ -84,18 +87,22 @@ function scopeFeature(f: Feature, scope: string): Feature {
 }
 
 /** Raccoglie privilegi attivi (specie, classi, sottoclassi, talenti, homebrew) e le scelte implicite. */
-export function collectFeatures(ch: CharacterData, reg: Registry, classLevels: Record<string, number>) {
+export function collectFeatures(ch: CharacterData, reg: Registry, classLevels: Record<string, number>, handEdits = true) {
   const active: ActiveFeature[] = [];
+  // I privilegi tolti a mano finiscono a parte: non portano effetti né scelte.
+  const off = new Set(handEdits ? (ch.disabledFeatures ?? []) : []);
+  const disabled: ActiveFeature[] = [];
+  const add = (a: ActiveFeature) => (off.has(a.feature.id) ? disabled : active).push(a);
   const choices: CollectedChoice[] = [];
   const firstClassId = ch.levels[0]?.classId;
 
   const species = must(reg.species, ch.speciesId, "Specie");
-  for (const f of species.features) active.push({ feature: f, source: species.name, kind: "species" });
+  for (const f of species.features) add({ feature: f, source: species.name, kind: "species" });
 
   const bg = must(reg.backgrounds, ch.backgroundId, "Background");
   const bgFeat = bg.featId ? reg.feats.get(bg.featId) : undefined;
-  for (const f of bg.features ?? []) active.push({ feature: f, source: bg.name, kind: "background" });
-  if (bgFeat) active.push({ feature: bgFeat.feature, source: `${bg.name} (talento)`, kind: "feat" });
+  for (const f of bg.features ?? []) add({ feature: f, source: bg.name, kind: "background" });
+  if (bgFeat) add({ feature: bgFeat.feature, source: `${bg.name} (talento)`, kind: "feat" });
   if (bg.toolChoice) {
     choices.push({ id: "background.tool", kind: "tool", label: bg.toolChoice.label, count: 1, from: bg.toolChoice.from, source: bg.name });
   }
@@ -122,16 +129,16 @@ export function collectFeatures(ch: CharacterData, reg: Registry, classLevels: R
         source: cls.name,
       });
     }
-    for (const f of cls.features) if ((f.level ?? 1) <= lvl) active.push({ feature: f, source: cls.name, classId, kind: "class" });
+    for (const f of cls.features) if ((f.level ?? 1) <= lvl) add({ feature: f, source: cls.name, classId, kind: "class" });
     if (lvl >= cls.subclassLevel) {
       choices.push({ id: `${classId}.subclass`, kind: "subclass", label: `Sottoclasse (${cls.name})`, count: 1, source: cls.name });
       const subId = ch.subclasses[classId];
       const sub = subId ? reg.subclasses.get(subId) : undefined;
-      if (sub) for (const f of sub.features) if ((f.level ?? 1) <= lvl) active.push({ feature: f, source: sub.name, classId, kind: "class" });
+      if (sub) for (const f of sub.features) if ((f.level ?? 1) <= lvl) add({ feature: f, source: sub.name, classId, kind: "class" });
     }
   }
 
-  for (const f of ch.customFeatures ?? []) active.push({ feature: f, source: "Personalizzato", kind: "custom" });
+  for (const f of ch.customFeatures ?? []) add({ feature: f, source: "Personalizzato", kind: "custom", section: f.section ?? "feat" });
 
   // Le scelte dei privilegi possono portare talenti, che a loro volta hanno scelte.
   const seenFeats = new Set<string>(bgFeat ? [bgFeat.id] : []);
@@ -144,12 +151,12 @@ export function collectFeatures(ch: CharacterData, reg: Registry, classLevels: R
         const feat = reg.feats.get(featId);
         if (!feat) continue;
         if (feat.repeatable) {
-          active.push({ feature: scopeFeature(feat.feature, c.id), source: `${feature.name}: ${feat.name}`, classId, kind: featKind(feat, kind) });
+          add({ feature: scopeFeature(feat.feature, c.id), source: `${feature.name}: ${feat.name}`, classId, kind: featKind(feat, kind) });
           continue;
         }
         if (seenFeats.has(feat.id)) continue;
         seenFeats.add(feat.id);
-        active.push({ feature: feat.feature, source: `${feature.name}: ${feat.name}`, classId, kind: featKind(feat, kind) });
+        add({ feature: feat.feature, source: `${feature.name}: ${feat.name}`, classId, kind: featKind(feat, kind) });
       }
     }
   }
@@ -163,7 +170,7 @@ export function collectFeatures(ch: CharacterData, reg: Registry, classLevels: R
     if (c.kind === "tool") chosenTools.push(...picked);
   }
 
-  return { active, choices, chosenSkills, chosenTools };
+  return { active, disabled, choices, chosenSkills, chosenTools };
 }
 
 /** Le opzioni di classe (manovre, suppliche...) restano privilegi di chi le concede; i talenti veri vanno tra i talenti. */
@@ -198,7 +205,7 @@ export function computeSheet(ch: CharacterData, reg: Registry, opts: ComputeOpti
   const species = must(reg.species, ch.speciesId, "Specie");
   const bg = must(reg.backgrounds, ch.backgroundId, "Background");
 
-  const { active, choices, chosenSkills, chosenTools } = collectFeatures(ch, reg, classLevels);
+  const { active, disabled, choices, chosenSkills, chosenTools } = collectFeatures(ch, reg, classLevels, policy.applyOverrides);
   const { armor, shield, weapons } = equippedGear(ch, reg);
   const exh = Math.max(0, Math.min(6, ch.state.exhaustion));
   // Indebolimento: nel 2024 toglie 2 a ogni d20 per livello; nel 2014 dà svantaggi a soglie.
@@ -313,6 +320,21 @@ export function computeSheet(ch: CharacterData, reg: Registry, opts: ComputeOpti
   const saveProf = new Set<string>([...(firstClass?.proficiencies.saves ?? []), ...grants("save")]);
   const skillProf = new Set<string>([...bg.skills, ...chosenSkills, ...grants("skill")]);
   const expertise = new Set<string>(grants("expertise"));
+  const languages = new Set<string>(grants("language"));
+  // Correzioni a mano: competenze aggiunte o tolte (togliere un'abilità toglie anche la maestria).
+  const profEdits = policy.applyOverrides ? ch.proficiencyEdits : undefined;
+  const sets: Record<ProficiencyKind, Set<string>[]> = {
+    armor: [armorProf],
+    weapons: [weaponProf],
+    tools: [toolProf],
+    languages: [languages],
+    saves: [saveProf],
+    skills: [skillProf, expertise],
+  };
+  for (const [k, targets] of Object.entries(sets) as [ProficiencyKind, Set<string>[]][]) {
+    for (const x of profEdits?.add?.[k] ?? []) targets[0]!.add(x);
+    for (const x of profEdits?.remove?.[k] ?? []) for (const s of targets) s.delete(x);
+  }
   for (const c of choices) {
     if (c.kind !== "expertise") continue;
     for (const id of picks(c)) {
@@ -515,8 +537,8 @@ export function computeSheet(ch: CharacterData, reg: Registry, opts: ComputeOpti
   const features: ComputedSheet["features"] = [];
   const dice: ComputedSheet["dice"] = [];
   const widgets: WidgetRef[] = [...CORE_WIDGETS];
-  for (const { feature, source, kind, classId } of active) {
-    features.push({ id: feature.id, name: feature.name, source, kind, classId, description: feature.description });
+  for (const { feature, source, kind, classId, section } of active) {
+    features.push({ id: feature.id, name: feature.name, source, kind, classId, description: feature.description, section });
     for (const d of feature.dice ?? []) {
       if (!evalCondition(d.when, ctx)) continue;
       dice.push({ id: d.id, name: d.name, expr: resolveDice(d.dice, ctx), source, classId, damageType: d.damageType, note: d.note });
@@ -619,6 +641,7 @@ export function computeSheet(ch: CharacterData, reg: Registry, opts: ComputeOpti
     actions,
     toggles,
     features,
+    disabledFeatures: disabled.map(({ feature, source, kind, classId, section }) => ({ id: feature.id, name: feature.name, source, kind, classId, description: feature.description, section })),
     pendingChoices,
     widgets,
     resistances: unique(grants("resistance")),
@@ -636,7 +659,7 @@ export function computeSheet(ch: CharacterData, reg: Registry, opts: ComputeOpti
       armor: [...armorProf],
       weapons: [...weaponProf],
       tools: [...toolProf],
-      languages: unique(grants("language")),
+      languages: [...languages],
     },
     spellcasting,
     issues: policy.validation === "off" ? issues.filter((i) => i.code.startsWith("override")) : issues,
