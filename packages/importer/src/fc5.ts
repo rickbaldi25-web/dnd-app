@@ -846,7 +846,10 @@ export function importCompendium(xml: string, opts: ImportOptions): { pack: Cont
   const classes: ClassDef[] = [];
   const subclasses: SubclassDef[] = [];
   const feats: FeatDef[] = [ASI_FEAT];
+  // I gregari (Expert, Spellcaster, Warrior Sidekick) restano fuori: non sono classi per i giocatori.
+  const SKIPPED_CLASSES = /sidekick/i;
   for (const n of named("class")) {
+    if (SKIPPED_CLASSES.test(val(n, "name") ?? "")) continue;
     const r = importClass(n, ctx, classIds);
     classes.push(r.cls);
     subclasses.push(...r.subclasses);

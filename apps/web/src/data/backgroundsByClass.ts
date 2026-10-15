@@ -127,6 +127,18 @@ const ONLY: Record<string, string[] | "all"> = {
 };
 
 /**
+ * Per ora si propongono solo i background del Manuale del Giocatore (quelli elencati in BY_CLASS):
+ * gli altri restano importati, e i personaggi che li hanno già funzionano. Per riattivarli: false.
+ */
+const CORE_ONLY = true;
+const CORE = new Set(Object.values(BY_CLASS).flat());
+
+/** Il background si può scegliere alla creazione? */
+export function backgroundEnabled(backgroundId: string): boolean {
+  return !CORE_ONLY || CORE.has(backgroundId);
+}
+
+/**
  * Il background va bene per la classe? Le classi senza elenco (i gregari, quelle homebrew)
  * li accettano tutti, e così i background che qui non compaiono.
  */

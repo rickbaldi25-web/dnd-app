@@ -6,8 +6,16 @@ import type { CharacterController } from "../state/useCharacter";
 
 type Pending = CharacterController["sheet"]["pendingChoices"][number];
 
-/** Oltre questo numero di opzioni i pulsanti diventano un menu a tendina. */
+/** Oltre questo numero di opzioni compare la ricerca e l'elenco scorre in un riquadro. */
 const MANY = 24;
+
+/** Opzioni proposte per prime, prima dell'ordine alfabetico: l'Aumento dei punteggi è la scelta più comune. */
+const FIRST = new Set(["asi"]);
+
+/** Testo su cui cercare: nome italiano più quello inglese, senza accenti. */
+const fold = (t: string) => t.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+const searchText = (kind: string, id: string) =>
+  fold(`${optionLabel(kind, id)} ${kind === "feat" ? (registry.feats.get(id)?.nameEn ?? "") : kind === "subclass" ? (registry.subclasses.get(id)?.nameEn ?? "") : ""}`);
 
 function optionsFor(c: CharacterController, p: Pending): string[] {
   if (p.kind === "subclass") {
@@ -57,7 +65,12 @@ function ChoiceRow({ c, p }: { c: CharacterController; p: Pending }) {
   const [focus, setFocus] = useState<string | undefined>(current[0]);
   const options = optionsFor(c, p)
     .filter((o) => !(p.kind === "skill" && registry.backgrounds.get(c.ch.backgroundId)?.skills.includes(o)))
-    .sort((a, b) => optionLabel(p.kind, a).localeCompare(optionLabel(p.kind, b), "it"));
+    .sort((a, b) => Number(FIRST.has(b)) - Number(FIRST.has(a)) || optionLabel(p.kind, a).localeCompare(optionLabel(p.kind, b), "it"));
+  const [query, setQuery] = useState("");
+  const many = options.length > MANY;
+  const q = fold(query.trim());
+  // Le opzioni già scelte restano in vista anche quando la ricerca le esclude.
+  const shown = q ? [...picked.filter((o, i) => picked.indexOf(o) === i && !searchText(p.kind, o).includes(q)), ...options.filter((o) => searchText(p.kind, o).includes(q))] : options;
   const need = p.required;
   const count = (o: string) => picked.filter((x) => x === o).length;
   // Con "repeat" la stessa opzione si può prendere più volte (+2 alla stessa caratteristica).
@@ -84,28 +97,25 @@ function ChoiceRow({ c, p }: { c: CharacterController; p: Pending }) {
           scegli {need}, {picked.length} selezionat{picked.length === 1 ? "a" : "e"}
         </span>
       </p>
-      {options.length > MANY && need === 1 ? (
-        <select value={picked[0] ?? ""} onChange={(e) => {
-            setFocus(e.currentTarget.value || undefined);
-            setPicked(e.currentTarget.value ? [e.currentTarget.value] : []);
-          }} aria-label={p.label}>
-          <option value="">—</option>
-          {options.map((o) => (
-            <option key={o} value={o}>
-              {optionLabel(p.kind, o)}
-            </option>
-          ))}
-        </select>
-      ) : (
-        <div className="chips">
-          {options.map((o) => (
-            <button key={o} className={`chip ${picked.includes(o) ? "is-on" : ""}`} aria-pressed={picked.includes(o)} onClick={() => flip(o)}>
-              {optionLabel(p.kind, o)}
-              {count(o) > 1 ? ` ×${count(o)}` : ""}
-            </button>
-          ))}
-        </div>
+      {many && (
+        <input
+          type="search"
+          className="choice-search"
+          value={query}
+          onChange={(e) => setQuery(e.currentTarget.value)}
+          placeholder={`Cerca tra ${options.length} opzioni (anche in inglese)`}
+          aria-label={`Cerca: ${p.label}`}
+        />
       )}
+      <div className={`chips ${many ? "chips-scroll" : ""}`}>
+        {shown.map((o) => (
+          <button key={o} className={`chip ${picked.includes(o) ? "is-on" : ""} ${FIRST.has(o) ? "is-first" : ""}`} aria-pressed={picked.includes(o)} onClick={() => flip(o)}>
+            {optionLabel(p.kind, o)}
+            {count(o) > 1 ? ` ×${count(o)}` : ""}
+          </button>
+        ))}
+        {shown.length === 0 && <span className="muted small">Nessuna opzione trovata.</span>}
+      </div>
       {p.repeat && picked.length > 0 && (
         <button className="btn btn-quiet" onClick={() => setPicked([])}>
           Azzera

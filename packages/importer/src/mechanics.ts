@@ -305,8 +305,51 @@ const BASE: Record<string, Mechanics> = {
   },
 };
 
-/** Tutte le meccaniche: quelle di base qui sopra e quelle delle sottoclassi, un file per classe. */
-export const MECHANICS: Record<string, Mechanics> = { ...BASE, ...SUBCLASS_MECHANICS };
+/* ---------------- Specie con scelte ---------------- */
+
+const ABILITY_IDS = ["str", "dex", "con", "int", "wis", "cha"] as const;
+/** "+1 a N caratteristiche a scelta", esclusa quella che la specie aumenta già di 2. */
+const plusOne = (id: string, count: number, fixed?: (typeof ABILITY_IDS)[number]): Mechanics => ({
+  choices: [
+    {
+      id: `${id}.boost`,
+      kind: "abilityBoost",
+      label: count === 1 ? "+1 a una caratteristica a scelta" : `+1 a ${count} caratteristiche a scelta`,
+      count,
+      from: ABILITY_IDS.filter((a) => a !== fixed),
+    },
+  ],
+});
+const skillsOf = (id: string, count: number, label: string): Mechanics => ({ choices: [{ id: `${id}.skills`, kind: "skill", label, count, from: ALL_SKILLS }] });
+const featOf = (id: string, label: string): Mechanics => ({ choices: [{ id: `${id}.feat`, kind: "feat", label, count: 1, from: { tag: "general" } }] });
+
+const HALF_ELVES = ["half-elf", "half-elf-high-elf-ancestry", "half-elf-wood-elf-ancestry", "half-elf-dark-elf-ancestry", "half-elf-aquatic-elf-ancestry"];
+const SPECIES: Record<string, Mechanics> = {
+  "human-variant.ability-score-increase": plusOne("human-variant", 2),
+  "human-variant.skills": skillsOf("human-variant", 1, "Abilità (umano variante)"),
+  "human-variant.feat": featOf("human-variant", "Talento (umano variante)"),
+  // Stirpe personalizzata: +2 a una caratteristica (si sceglie la stessa due volte).
+  "custom-lineage.ability-score-increase": {
+    choices: [{ id: "custom-lineage.boost", kind: "abilityBoost", label: "+2 a una caratteristica (scegli la stessa due volte)", count: 2, repeat: true }],
+  },
+  "custom-lineage.feat": featOf("custom-lineage", "Talento (stirpe personalizzata)"),
+  ...Object.fromEntries(
+    HALF_ELVES.flatMap((id) => [
+      [`${id}.ability-score-increase`, plusOne(id, 2, "cha")],
+      [`${id}.skill-versatility`, skillsOf(id, 2, "Versatilità nelle abilità")],
+    ]),
+  ),
+  "half-elf-mark-of-detection.ability-score-increase": plusOne("half-elf-mark-of-detection", 1, "wis"),
+  "human-mark-of-handling.ability-score-increase": plusOne("human-mark-of-handling", 1, "wis"),
+  "human-mark-of-making.ability-score-increase": plusOne("human-mark-of-making", 1, "int"),
+  "human-mark-of-passage.ability-score-increase": plusOne("human-mark-of-passage", 1, "dex"),
+  "human-mark-of-sentinel.ability-score-increase": plusOne("human-mark-of-sentinel", 1, "con"),
+  "simic-hybrid.ability-score-increase": plusOne("simic-hybrid", 1, "con"),
+  "warforged.ability-score-increase": plusOne("warforged", 1, "con"),
+};
+
+/** Tutte le meccaniche: quelle di base qui sopra, delle specie e delle sottoclassi (un file per classe). */
+export const MECHANICS: Record<string, Mechanics> = { ...BASE, ...SPECIES, ...SUBCLASS_MECHANICS };
 
 /**
  * Incantesimi sempre preparati delle sottoclassi. Il compendio li elenca come liste
@@ -353,6 +396,7 @@ export function applyMechanics(pack: ContentPack, mechanics: Record<string, Mech
   const targets: { id: string; feature: Feature }[] = [
     ...[...(pack.classes ?? []), ...(pack.subclasses ?? [])].flatMap((c) => c.features.map((feature) => ({ id: feature.id, feature }))),
     ...(pack.feats ?? []).map((f) => ({ id: f.id, feature: f.feature })),
+    ...(pack.species ?? []).flatMap((s) => s.features.map((feature) => ({ id: feature.id, feature }))),
   ];
   const report: MechanicsReport = { applied: 0, missing: [], subclassSpells: 0 };
   for (const [key, m] of Object.entries(mechanics)) {

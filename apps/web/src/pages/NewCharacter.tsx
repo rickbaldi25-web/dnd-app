@@ -14,7 +14,7 @@ import { AutomationSwitch } from "../components/AutomationSwitch";
 import { EMPTY_GEAR, resolveGear, StartingGear, type GearState } from "../components/StartingGear";
 import { ABILITY_NAMES, SPECIES_LABEL, registry } from "../content";
 import { repo } from "../data";
-import { backgroundFits } from "../data/backgroundsByClass";
+import { backgroundEnabled, backgroundFits } from "../data/backgroundsByClass";
 import { useAuth } from "../firebase/auth";
 import { useUserAutomation } from "../state/useCharacter";
 
@@ -25,7 +25,7 @@ const EMPTY: Record<Ability, number> = { str: 8, dex: 8, con: 8, int: 8, wis: 8,
 /** Con i contenuti importati le liste sono lunghe: in ordine alfabetico si trovano. */
 const byName = <T extends { name: string }>(m: Map<string, T>): T[] => [...m.values()].sort((a, b) => a.name.localeCompare(b.name, "it"));
 const SPECIES = byName(registry.species);
-const BACKGROUNDS = byName(registry.backgrounds);
+const BACKGROUNDS = byName(registry.backgrounds).filter((b) => backgroundEnabled(b.id));
 const CLASSES = byName(registry.classes);
 
 export function NewCharacter() {
