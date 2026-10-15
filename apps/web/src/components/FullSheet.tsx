@@ -30,7 +30,9 @@ import {
   NotesWidget,
   Panel,
   Purse,
+  ResourcePips,
   StatNumber,
+  ToggleSwitch,
   breakdown,
   useRoller,
 } from "../widgets/core";
@@ -45,7 +47,7 @@ import { RichText } from "./RichText";
  *     classe, privilegi di classe, tratti della specie e talenti.
  *  2. Incantesimi e storia: incantatore, slot, tabella degli incantesimi; aspetto, storia, lingue,
  *     equipaggiamento con sintonia, denari.
- * La vista di combattimento resta quella a zone (pages/Sheet.tsx).
+ * In combattimento CombatSheet usa gli stessi pezzi, ridotti a ciò che serve nel turno.
  */
 
 type Page = "pg" | "storia";
@@ -552,7 +554,14 @@ function Training({ c }: { c: CharacterController }) {
   );
 }
 
-function StatStrip({ c }: { c: CharacterController }) {
+/** In combattimento (`combat`) restano solo i valori che servono nel turno. */
+function StatStrip({
+  c,
+  combat = false,
+}: {
+  c: CharacterController;
+  combat?: boolean;
+}) {
   const { sheet } = c;
   const roller = useRoller();
   const species = registry.species.get(c.ch.speciesId);
@@ -561,10 +570,12 @@ function StatStrip({ c }: { c: CharacterController }) {
   );
   return (
     <div className="fs-strip">
-      <section className="fs-box fs-stat">
-        <span className="fs-label">Bonus di competenza</span>
-        <span className="fs-mid">{formatMod(sheet.proficiencyBonus)}</span>
-      </section>
+      {!combat && (
+        <section className="fs-box fs-stat">
+          <span className="fs-label">Bonus di competenza</span>
+          <span className="fs-mid">{formatMod(sheet.proficiencyBonus)}</span>
+        </section>
+      )}
       <Inspiration c={c} />
       <section className="fs-box fs-stat">
         <span className="fs-label">Iniziativa</span>
@@ -595,10 +606,12 @@ function StatStrip({ c }: { c: CharacterController }) {
           </span>
         )}
       </section>
-      <section className="fs-box fs-stat">
-        <span className="fs-label">Taglia</span>
-        <span className="fs-mid fs-text">{sizeName(species?.size)}</span>
-      </section>
+      {!combat && (
+        <section className="fs-box fs-stat">
+          <span className="fs-label">Taglia</span>
+          <span className="fs-mid fs-text">{sizeName(species?.size)}</span>
+        </section>
+      )}
       <section className="fs-box fs-stat">
         <span className="fs-label">Percezione passiva</span>
         <span className="fs-mid">{sheet.passivePerception}</span>
@@ -666,22 +679,51 @@ function FeatureBox({
   );
 }
 
-/** Azioni e dadi che non vengono da una classe (specie, talenti, oggetti). */
+/** Risorse, stati e azioni che non vengono da una classe (specie, talenti, oggetti). */
 function OtherActions({ c }: { c: CharacterController }) {
-  const actions = c.sheet.actions.filter(
+  const { sheet } = c;
+  const toggles = sheet.toggles.filter((t) => !t.classId);
+  const resources = sheet.resources.filter((r) => !r.classId);
+  const actions = sheet.actions.filter(
     (a) =>
       !a.classId &&
       a.outcome?.kind !== "toggleOn" &&
       a.outcome?.kind !== "toggleOff",
   );
-  if (!actions.length) return null;
+  if (!toggles.length && !resources.length && !actions.length) return null;
   return (
-    <Panel title="Altre azioni" className="actions-panel">
-      <ul className="action-list">
-        {actions.map((a) => (
-          <ActionRow key={a.id} c={c} a={a} />
-        ))}
-      </ul>
+    <Panel title="Altre risorse e azioni" className="actions-panel">
+      {toggles.length > 0 && (
+        <div className="module-row">
+          {toggles.map((t) => (
+            <div
+              key={t.id}
+              className={`module-toggle ${t.active ? "is-active" : ""}`}
+            >
+              <ToggleSwitch c={c} t={t} />
+            </div>
+          ))}
+        </div>
+      )}
+      {resources.map((r) => (
+        <div key={r.id} className="module-resource">
+          <div className="row between">
+            <strong>{r.name}</strong>
+            <span className="muted small">
+              {r.remaining}/{r.max} · torna con{" "}
+              {r.shortRest ? "riposo breve o lungo" : "riposo lungo"}
+            </span>
+          </div>
+          <ResourcePips c={c} r={r} />
+        </div>
+      ))}
+      {actions.length > 0 && (
+        <ul className="action-list">
+          {actions.map((a) => (
+            <ActionRow key={a.id} c={c} a={a} />
+          ))}
+        </ul>
+      )}
     </Panel>
   );
 }
@@ -1148,6 +1190,75 @@ export function FullSheet({
         </button>
       </nav>
       {page === "pg" ? <PageCharacter c={c} /> : <PageStory c={c} />}
+    </div>
+  );
+}
+
+/** Tiri salvezza in una riga di sei pulsanti, per la vista di combattimento. */
+function SavesRow({ c }: { c: CharacterController }) {
+  const roller = useRoller();
+  return (
+    <Panel title="Tiri salvezza" className="fs-saves">
+      <div className="fs-saves-grid">
+        {ABILITIES.map((a) => {
+          const save = c.sheet.saves[a];
+          const name = ABILITY_NAMES[a].name;
+          return (
+            <button
+              key={a}
+              className={`fs-save-btn ${save.proficient ? "is-prof" : ""}`}
+              onClick={() =>
+                roller(
+                  `TS su ${name}`,
+                  save.mod.value,
+                  save.advantage ? "advantage" : "normal",
+                )
+              }
+              title={save.proficient ? "Competente" : undefined}
+            >
+              <span className="fs-label">{ABILITY_NAMES[a].short}</span>
+              <span className="fs-mid">{formatMod(save.mod.value)}</span>
+              {save.advantage && (
+                <span className="adv" title="Vantaggio">
+                  V
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </Panel>
+  );
+}
+
+/**
+ * Vista di combattimento: gli stessi pezzi della scheda completa, solo quelli del turno.
+ * In alto CA, PF e TS contro morte; a sinistra i moduli di classe, le condizioni e i TS; a destra, larga,
+ * attacchi e incantesimi.
+ */
+export function CombatSheet({ c }: { c: CharacterController }) {
+  return (
+    <div className="full-sheet fs-combat">
+      <div className="fs-combat-head">
+        <ArmorClass c={c} />
+        <HitPoints c={c} />
+        <DeathSaves c={c} />
+      </div>
+      <StatStrip c={c} combat />
+      <div className="fs-columns fs-combat-cols">
+        <div className="fs-left">
+          {Object.keys(c.sheet.classLevels).map((id) => (
+            <ClassModule key={id} c={c} classId={id} />
+          ))}
+          <OtherActions c={c} />
+          <Conditions c={c} />
+          <SavesRow c={c} />
+        </div>
+        <div className="fs-main">
+          <AttacksWidget c={c} w={{ widget: "attacks" }} />
+          {c.sheet.spellcasting && <Spellcasting c={c} />}
+        </div>
+      </div>
     </div>
   );
 }

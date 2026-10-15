@@ -677,3 +677,60 @@ input.diamond:disabled {
   flex: 1;
   min-height: 7rem;
 }
+
+/* ---------------- Vista di combattimento ---------------- */
+
+/* Su telefono CA e TS contro morte affiancati, PF sotto a tutta larghezza; da tablet in poi tutti in fila. */
+.fs-combat-head {
+  display: grid;
+  gap: var(--gap);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-areas: "ac death" "hp hp";
+}
+.fs-combat-head .fs-ac {
+  grid-area: ac;
+}
+.fs-combat-head .fs-hp {
+  grid-area: hp;
+}
+.fs-combat-head .fs-death {
+  grid-area: death;
+}
+.fs-combat .fs-strip {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+@media (min-width: 700px) {
+  .fs-combat-head {
+    grid-template-columns: minmax(0, 0.6fr) minmax(0, 2.4fr) minmax(0, 1fr);
+    grid-template-areas: "ac hp death";
+  }
+}
+/* La colonna di destra, con attacchi e incantesimi, prende quasi tre quarti dello spazio. */
+@media (min-width: 1100px) {
+  .fs-columns.fs-combat-cols {
+    grid-template-columns: minmax(300px, 1fr) minmax(0, 2.6fr);
+  }
+}
+.fs-saves-grid {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+.fs-save-btn {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 0.4rem 0.2rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--field);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.fs-save-btn.is-prof {
+  border-color: var(--copper);
+}
+.fs-save-btn:hover {
+  border-color: var(--line-strong);
+}
