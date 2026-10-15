@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from "react-router";
 import { AutomationSwitch } from "../components/AutomationSwitch";
 import { Badge, CampaignDrawer, useCampaignSide } from "../components/CampaignSide";
 import { ChoicesPanel } from "../components/ChoicesPanel";
+import { FullSheet } from "../components/FullSheet";
 import { TurnBanner, useEncounter } from "../components/Initiative";
 import { LevelUpDialog } from "../components/LevelUpDialog";
 import { XpBar } from "../components/XpBar";
@@ -215,8 +216,15 @@ export function Sheet() {
           </ul>
         )}
 
-        <Zones c={c} combat={combat} />
-        <ZoneTabs combat={combat} />
+        {/* In combattimento la vista a zone con l'essenziale; fuori, la scheda completa a due pagine come il foglio. */}
+        {combat ? (
+          <>
+            <Zones c={c} combat />
+            <ZoneTabs combat />
+          </>
+        ) : (
+          <FullSheet c={c} onLevelUp={() => setLvlOpen(true)} />
+        )}
 
         {ch.campaignId && user && <CampaignDrawer campaignId={ch.campaignId} currentId={ch.id} uid={user.uid} sections={["turno", "gruppo", "handout", "diario", "tiri"]} news={news} open={sideOpen} onToggle={setSideOpen} pageLink />}
 

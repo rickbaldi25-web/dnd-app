@@ -1,0 +1,628 @@
+/*
+ * Scheda completa a due pagine, sul modello del foglio ufficiale (components/FullSheet.tsx).
+ * Riquadri con etichetta piccola in maiuscolo e numero grande, caratteristiche in colonna con
+ * tiri salvezza e abilità sotto, colonna larga a destra. Nessun effetto decorativo: solo filetti e numeri.
+ */
+
+.accent-blood {
+  --accent: var(--blood);
+}
+.accent-verdigris {
+  --accent: var(--verdigris);
+}
+
+.full-sheet {
+  display: grid;
+  gap: var(--gap);
+}
+.full-sheet .panel {
+  margin: 0;
+}
+
+/* ---------------- Elementi comuni ---------------- */
+
+.fs-box {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  min-width: 0;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+.fs-label {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--heading);
+}
+.fs-big {
+  font-size: 2.1rem;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.fs-mid {
+  font-size: 1.45rem;
+  font-weight: 800;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+.fs-mid.fs-text {
+  font-size: 1.1rem;
+}
+.fs-sub {
+  font-size: var(--step--1);
+  color: var(--muted);
+  font-weight: 600;
+}
+.btn-small {
+  min-height: 30px;
+  padding: 0.1rem 0.6rem;
+  font-size: var(--step--1);
+}
+
+/* Rombi come sul foglio: TS contro morte, sintonia, ispirazione, armature */
+input.diamond {
+  appearance: none;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border-radius: 2px;
+  margin: 0 5px;
+  border: 2px solid var(--line-strong);
+  background: transparent;
+  transform: rotate(45deg);
+  cursor: pointer;
+}
+input.diamond:checked {
+  background: var(--text);
+  border-color: var(--text);
+}
+input.diamond.success:checked {
+  background: var(--verdigris);
+  border-color: var(--verdigris);
+}
+input.diamond.failure:checked {
+  background: var(--blood);
+  border-color: var(--blood);
+}
+input.diamond:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.diamond-mark {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 0.15rem;
+  border: 1.5px solid var(--line-strong);
+  transform: rotate(45deg);
+}
+.is-on > .diamond-mark {
+  background: var(--text);
+  border-color: var(--text);
+}
+.diamond-btn {
+  width: 26px;
+  height: 26px;
+  min-height: 0;
+  padding: 0;
+  border-radius: 3px;
+  border: 2px solid var(--copper);
+  background: transparent;
+  transform: rotate(45deg);
+  cursor: pointer;
+}
+.diamond-btn.is-on {
+  background: var(--copper);
+}
+
+/* ---------------- Intestazione ---------------- */
+
+.fs-head {
+  display: grid;
+  gap: var(--gap);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.fs-identity {
+  grid-column: 1 / -1;
+  align-items: stretch;
+  text-align: left;
+}
+.fs-identity dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem 1rem;
+  margin: 0;
+}
+.fs-identity dt {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.fs-identity dd {
+  margin: 0;
+  padding-bottom: 0.15rem;
+  border-bottom: 1px solid var(--line);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.fs-hp {
+  grid-column: 1 / -1;
+  align-items: stretch;
+}
+.fs-hp-numbers {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr;
+  align-items: end;
+}
+.fs-hp-numbers > div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.fs-hp .hp-bar {
+  margin: 0.35rem 0;
+}
+.fs-hp-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+.fs-hp-controls .hp-amount {
+  width: 4.5rem;
+}
+.fs-hp-controls select {
+  flex: 1 1 8rem;
+  min-width: 0;
+}
+.fs-ac {
+  border-radius: var(--radius-panel) var(--radius-panel) 45% 45% / var(--radius-panel) var(--radius-panel) 35% 35%;
+}
+.fs-death-row {
+  display: flex;
+  align-items: center;
+  gap: 0.15rem;
+}
+.fs-death-row .fs-sub {
+  width: 5.3em;
+  text-align: left;
+}
+.fs-death.is-dying {
+  border-color: var(--blood);
+}
+.fs-hd {
+  justify-content: flex-start;
+}
+.fs-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 8;
+  width: min(320px, 90vw);
+  text-align: left;
+}
+
+@media (min-width: 700px) {
+  .fs-head {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .fs-identity dl {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .fs-hp {
+    grid-column: span 2;
+  }
+}
+@media (min-width: 1100px) {
+  .fs-head {
+    grid-template-columns: minmax(0, 2.6fr) minmax(0, 0.7fr) minmax(0, 0.7fr) minmax(0, 2.2fr) minmax(0, 0.9fr) minmax(0, 1fr);
+  }
+  .fs-identity {
+    grid-column: auto;
+  }
+  .fs-identity dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .fs-hp {
+    grid-column: auto;
+  }
+}
+
+/* ---------------- Linguette delle pagine ---------------- */
+
+.fs-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--panel);
+  /* resta in vista sotto la barra in alto, come il riquadro del turno in combattimento */
+  position: sticky;
+  top: 3.9rem;
+  z-index: 4;
+}
+.fs-tabs button {
+  flex: 1;
+  min-height: 40px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+.fs-tabs button.is-on {
+  background: var(--copper);
+  color: var(--copper-ink);
+  box-shadow: inset 0 0 0 1px var(--accent-edge);
+}
+
+/* ---------------- Pagina 1 ---------------- */
+
+.fs-page {
+  display: grid;
+  gap: var(--gap);
+  align-items: start;
+}
+.fs-abilities {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--gap);
+  align-items: start;
+}
+.fs-col {
+  display: grid;
+  gap: var(--gap);
+}
+.fs-abilities .fs-training {
+  grid-column: 1 / -1;
+}
+.fs-ability {
+  padding: 0.55rem 0.7rem 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+.fs-ability h3 {
+  margin: 0 0 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-align: center;
+  text-transform: uppercase;
+  color: var(--heading);
+}
+.fs-ability-score {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  margin-bottom: 0.25rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+.fs-ability-mod {
+  display: grid;
+  place-items: center;
+  width: 3.4rem;
+  height: 3.4rem;
+  border: 2px solid var(--line-strong);
+  border-radius: 50%;
+  font-size: 1.5rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.fs-ability-raw {
+  margin-top: -0.55rem;
+  padding: 0 0.55rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--panel);
+  font-size: var(--step--1);
+  font-weight: 700;
+}
+.fs-ability .check-row {
+  min-height: 30px;
+  font-size: 0.95rem;
+}
+.fs-save .check-name {
+  font-weight: 800;
+}
+.fs-save .check-row {
+  border-bottom-color: var(--line-strong);
+}
+.fs-small {
+  text-align: center;
+}
+.fs-small-value {
+  display: grid;
+  place-items: center;
+  min-height: 2.2rem;
+}
+
+.fs-training .fs-armor {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.9rem;
+  margin: 0.5rem 0;
+}
+.fs-training .fs-armor > span {
+  color: var(--muted);
+}
+.fs-training .fs-armor > .is-on {
+  color: var(--text);
+  font-weight: 700;
+}
+.fs-prof-list {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.25rem 0.75rem;
+  margin: 0;
+}
+.fs-prof-list dt {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding-top: 0.15rem;
+}
+.fs-prof-list dd {
+  margin: 0;
+}
+
+.fs-main,
+.fs-side {
+  display: grid;
+  gap: var(--gap);
+  min-width: 0;
+}
+.fs-strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--gap);
+}
+.fs-traits {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  margin: 0;
+  color: var(--muted);
+}
+.fs-pair {
+  display: grid;
+  gap: var(--gap);
+  align-items: start;
+}
+
+/* Moduli di classe */
+.class-module {
+  border-top: 3px solid var(--accent, var(--copper));
+}
+.class-note {
+  margin: 0.35rem 0 0.5rem;
+}
+.module-row,
+.module-dice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: center;
+  margin: 0.5rem 0;
+}
+.module-toggle {
+  padding: 0.35rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.module-toggle.is-active {
+  border-color: var(--accent, var(--copper));
+}
+.module-die {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.module-die-value {
+  font-size: 1.2rem;
+  font-weight: 800;
+}
+.module-resource {
+  margin: 0.6rem 0;
+}
+.module-resource .pips {
+  margin-top: 0.3rem;
+}
+.module-options {
+  margin: 0.35rem 0 0;
+}
+
+@media (min-width: 700px) {
+  .fs-strip {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@media (min-width: 900px) {
+  .fs-pair {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1100px) {
+  .fs-page-1 {
+    grid-template-columns: minmax(400px, 0.9fr) minmax(0, 2fr);
+  }
+  .fs-page-2 {
+    grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
+  }
+}
+
+/* ---------------- Pagina 2 ---------------- */
+
+.fs-caster {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 1rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.fs-caster .spell-picker {
+  flex-basis: 100%;
+}
+.fs-caster-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
+  gap: 0.4rem 1.2rem;
+  margin: 0;
+  flex: 1 1 20rem;
+}
+.fs-caster-stats dt {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.fs-caster-stats dd {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+.fs-slots {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 0.3rem 1.2rem;
+  margin: 0.6rem 0;
+}
+.fs-slots .slot-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.fs-slots .slot-label {
+  min-width: 5.5rem;
+  font-weight: 700;
+}
+
+.spell-table {
+  width: 100%;
+  margin-top: 0.5rem;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+.spell-table th,
+.spell-table td {
+  padding: 0.35rem 0.4rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+.spell-table thead th {
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.spell-table tbody th {
+  font-weight: 700;
+}
+.spell-table .num {
+  width: 2.2rem;
+  text-align: center;
+  font-weight: 800;
+}
+.spell-row {
+  cursor: pointer;
+}
+.spell-row:hover,
+.spell-row.is-open {
+  background: var(--field);
+}
+.spell-row .link-btn {
+  font-weight: 700;
+  color: inherit;
+  text-align: left;
+}
+.crm {
+  white-space: nowrap;
+}
+.crm span {
+  display: inline-block;
+  width: 1.3rem;
+  color: var(--line-strong);
+  font-weight: 800;
+  text-align: center;
+}
+.crm span.is-on {
+  color: var(--text);
+}
+.spell-detail td {
+  background: var(--field);
+}
+/* Sul telefono la tabella si stringe: via tempo e gittata, restano nella descrizione. */
+@media (max-width: 699px) {
+  .spell-table th:nth-child(3),
+  .spell-table td:nth-child(3),
+  .spell-table th:nth-child(4),
+  .spell-table td:nth-child(4) {
+    display: none;
+  }
+}
+
+.fs-text-box textarea {
+  width: 100%;
+  margin-top: 0.5rem;
+}
+.fs-inline {
+  display: grid;
+  gap: 0.2rem;
+  margin-top: 0.6rem;
+}
+.fs-attune {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+.fs-coins .purse {
+  margin-top: 0.5rem;
+}
+
+/* Su telefono e tablet prima ciò che serve giocando (attacchi, moduli di classe), poi le caratteristiche. */
+@media (max-width: 1099px) {
+  .fs-page-1 .fs-main {
+    order: -1;
+  }
+}

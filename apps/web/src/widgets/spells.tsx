@@ -10,7 +10,7 @@ import {
   type SpellDef,
   type SpellSelection,
 } from "@dnd/engine";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { RichText } from "../components/RichText";
 import { ABILITY_NAMES, registry } from "../content";
 import type { CharacterController } from "../state/useCharacter";
@@ -37,7 +37,7 @@ const MAX_ROWS = 60;
 /* Slot                                                                */
 /* ------------------------------------------------------------------ */
 
-function SlotRow({ c, pool, label, target }: { c: CharacterController; pool: SlotPool; label: string; target: number | "pact" }) {
+export function SlotRow({ c, pool, label, target }: { c: CharacterController; pool: SlotPool; label: string; target: number | "pact" }) {
   // Correzione a mano, come i pallini delle risorse: si salva senza passare dal registro.
   const set = (remaining: number) => c.update((ch) => ({ ...ch, state: setSlotsSpent(ch, target, pool.max - remaining).state }));
   return (
@@ -67,7 +67,7 @@ function SlotRow({ c, pool, label, target }: { c: CharacterController; pool: Slo
 /* Incantesimi pronti                                                  */
 /* ------------------------------------------------------------------ */
 
-function SpellText({ spell }: { spell: SpellDef }) {
+export function SpellText({ spell }: { spell: SpellDef }) {
   return (
     <>
       <p className="muted small">
@@ -81,6 +81,117 @@ function SpellText({ spell }: { spell: SpellDef }) {
 
 function tags(s: { level: number; school: string; concentration?: boolean; ritual?: boolean }, extra: string[] = []): string {
   return [SCHOOLS[s.school] ?? s.school, s.concentration ? "concentrazione" : "", s.ritual ? "rituale" : "", ...extra].filter(Boolean).join(", ");
+}
+
+/** Pulsanti per lanciare un incantesimo pronto: trucchetto, slot disponibili, patto, risorsa, rituale. */
+function CastButtons({ c, e }: { c: CharacterController; e: ComputedSpell }) {
+  const sc = c.sheet.spellcasting!;
+  const cast = (opts: Parameters<typeof castSpell>[3] = {}) => c.act(castSpell(c.ch, registry, e.spellId, { sourceId: e.sourceId, ...opts }));
+  const pools = sc.slots.filter((p) => p.level >= e.level && p.remaining > 0);
+  const pactOk = sc.pact && sc.pact.level >= e.level && sc.pact.remaining > 0;
+  const resource = e.resource ? c.sheet.resources.find((r) => r.id === e.resource) : undefined;
+  return (
+    <div className="row">
+      {e.level === 0 ? (
+        <button className="btn btn-primary" onClick={() => cast()}>
+          Lancia
+        </button>
+      ) : (
+        <>
+          {pools.map((p) => (
+            <button key={p.level} className={`btn ${p.level === pools[0]!.level ? "btn-primary" : ""}`} onClick={() => cast({ slotLevel: p.level })}>
+              Slot di {p.level}°
+            </button>
+          ))}
+          {pactOk && (
+            <button className="btn" onClick={() => cast({ pact: true })}>
+              Slot del Patto ({sc.pact!.level}°)
+            </button>
+          )}
+          {resource && resource.remaining > 0 && (
+            <button className="btn" onClick={() => cast({ useResource: true })}>
+              Senza slot ({resource.name})
+            </button>
+          )}
+          {e.ritual && (
+            <button className="btn" onClick={() => cast({ ritual: true })}>
+              Rituale
+            </button>
+          )}
+          {!pools.length && !pactOk && <span className="muted small">Nessuno slot disponibile per questo incantesimo.</span>}
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Numeri che servono al tavolo: bonus d'attacco, tiro salvezza e CD, dadi. */
+export function spellNumbers(e: ComputedSpell): string {
+  return [e.attackBonus !== undefined ? `attacco ${formatMod(e.attackBonus)}` : "", e.saveDC !== undefined && e.save ? `TS ${ABILITY_NAMES[e.save].short} CD ${e.saveDC}` : "", e.roll ?? ""]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/** Tabella degli incantesimi pronti, come sul foglio: livello, nome, tempo, gittata, C/R/M, note. Una riga si apre per leggere e lanciare. */
+export function SpellTable({ c, several }: { c: CharacterController; several: boolean }) {
+  const sc = c.sheet.spellcasting!;
+  const [open, setOpen] = useState<string | null>(null);
+  const list = [...sc.spells].sort((a, b) => a.level - b.level || a.name.localeCompare(b.name, "it"));
+  if (!list.length) return <p className="muted">Nessun incantesimo pronto: sceglili qui sopra.</p>;
+  return (
+    <table className="spell-table">
+      <thead>
+        <tr>
+          <th scope="col">Liv.</th>
+          <th scope="col">Nome</th>
+          <th scope="col">Tempo</th>
+          <th scope="col">Gittata</th>
+          <th scope="col" title="Concentrazione, rituale, componente materiale">
+            C · R · M
+          </th>
+          <th scope="col">Note</th>
+        </tr>
+      </thead>
+      <tbody>
+        {list.map((e) => {
+          const key = `${e.sourceId}-${e.spellId}`;
+          const spell = registry.spells.get(e.spellId);
+          const material = /\bM\b/.test(spell?.components ?? "");
+          const isOpen = open === key;
+          return (
+            <Fragment key={key}>
+              <tr className={`spell-row ${isOpen ? "is-open" : ""}`} onClick={() => setOpen(isOpen ? null : key)}>
+                <td className="num">{e.level === 0 ? "T" : e.level}</td>
+                <th scope="row">
+                  <button className="link-btn" aria-expanded={isOpen}>
+                    {e.name}
+                  </button>
+                  {several && <span className="muted small"> {e.sourceName}</span>}
+                  {e.always && <span className="muted small"> · sempre</span>}
+                </th>
+                <td>{e.castingTime}</td>
+                <td>{e.range}</td>
+                <td className="crm">
+                  <span className={e.concentration ? "is-on" : ""} title="Concentrazione">C</span>
+                  <span className={e.ritual ? "is-on" : ""} title="Rituale">R</span>
+                  <span className={material ? "is-on" : ""} title="Componente materiale">M</span>
+                </td>
+                <td className="muted small">{spellNumbers(e)}</td>
+              </tr>
+              {isOpen && spell && (
+                <tr className="spell-detail">
+                  <td colSpan={6}>
+                    <SpellText spell={spell} />
+                    <CastButtons c={c} e={e} />
+                  </td>
+                </tr>
+              )}
+            </Fragment>
+          );
+        })}
+      </tbody>
+    </table>
+  );
 }
 
 function ReadySpell({ c, e }: { c: CharacterController; e: ComputedSpell }) {
@@ -142,7 +253,7 @@ function ReadySpell({ c, e }: { c: CharacterController; e: ComputedSpell }) {
 
 type Tab = "cantrips" | "prepared" | "book";
 
-function Picker({ c, s }: { c: CharacterController; s: ComputedSpellSource }) {
+export function Picker({ c, s }: { c: CharacterController; s: ComputedSpellSource }) {
   const [tab, setTab] = useState<Tab>(s.cantripsMax > s.cantrips.length ? "cantrips" : s.spellbook ? "book" : "prepared");
   const [query, setQuery] = useState("");
   const [level, setLevel] = useState<number | "all">("all");

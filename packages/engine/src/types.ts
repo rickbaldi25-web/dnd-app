@@ -590,6 +590,8 @@ export interface LevelEntry {
 export interface EquipmentEntry {
   itemId: string;
   equipped?: boolean;
+  /** In sintonia (oggetti magici, massimo 3). */
+  attuned?: boolean;
   quantity?: number;
   notes?: string;
 }
@@ -657,6 +659,10 @@ export interface CharacterData {
   customFeatures?: Feature[];
   portraitUrl?: string;
   notes?: string;
+  /** Pagina 2 della scheda: allineamento, aspetto, storia e tratti caratteriali. */
+  alignment?: string;
+  appearance?: string;
+  backstory?: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -683,10 +689,15 @@ export interface Issue {
   path?: string;
 }
 
+/** Origine di un privilegio nella scheda. */
+export type FeatureKind = "species" | "background" | "class" | "feat" | "custom";
+
 export interface ComputedResource {
   id: string;
   name: string;
   source: string;
+  /** Classe che la concede (anche tramite sottoclasse o opzione di classe). */
+  classId?: string;
   max: number;
   spent: number;
   remaining: number;
@@ -715,6 +726,7 @@ export type ComputedAction = Omit<ActionDef, "roll"> & {
   /** Dadi già risolti per il livello attuale. */
   roll?: { dice: string; plus?: Value };
   source: string;
+  classId?: string;
   available: boolean;
 };
 
@@ -802,11 +814,11 @@ export interface ComputedSheet {
   attacksPerAction: number;
   attacks: ComputedAttack[];
   /** Dadi con un nome (Attacco Furtivo, Ispirazione Bardica...), già risolti per il livello. */
-  dice: { id: string; name: string; expr: string; source: string; damageType?: string; note?: string }[];
+  dice: { id: string; name: string; expr: string; source: string; classId?: string; damageType?: string; note?: string }[];
   resources: ComputedResource[];
   actions: ComputedAction[];
-  toggles: { id: string; name: string; active: boolean; available: boolean }[];
-  features: { id: string; name: string; source: string; description?: string }[];
+  toggles: { id: string; name: string; classId?: string; active: boolean; available: boolean }[];
+  features: { id: string; name: string; source: string; kind: FeatureKind; classId?: string; description?: string }[];
   pendingChoices: (ChoiceDef & { source: string; required: number; made: number })[];
   widgets: WidgetRef[];
   resistances: string[];

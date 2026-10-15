@@ -16,7 +16,9 @@ import {
   type ComputedSheet,
   type Die,
   type Effect,
+  type FeatDef,
   type Feature,
+  type FeatureKind,
   type Issue,
   type Part,
   type ShieldDef,
@@ -35,6 +37,8 @@ export interface ComputeOptions {
 interface ActiveFeature {
   feature: Feature;
   source: string;
+  /** Da dove viene, per dividerli nella scheda (privilegi di classe, tratti di specie, talenti). */
+  kind: FeatureKind;
   /** Classe a cui appartiene il privilegio (anche tramite la sottoclasse). */
   classId?: string;
 }
@@ -86,12 +90,12 @@ export function collectFeatures(ch: CharacterData, reg: Registry, classLevels: R
   const firstClassId = ch.levels[0]?.classId;
 
   const species = must(reg.species, ch.speciesId, "Specie");
-  for (const f of species.features) active.push({ feature: f, source: species.name });
+  for (const f of species.features) active.push({ feature: f, source: species.name, kind: "species" });
 
   const bg = must(reg.backgrounds, ch.backgroundId, "Background");
   const bgFeat = bg.featId ? reg.feats.get(bg.featId) : undefined;
-  for (const f of bg.features ?? []) active.push({ feature: f, source: bg.name });
-  if (bgFeat) active.push({ feature: bgFeat.feature, source: `${bg.name} (talento)` });
+  for (const f of bg.features ?? []) active.push({ feature: f, source: bg.name, kind: "background" });
+  if (bgFeat) active.push({ feature: bgFeat.feature, source: `${bg.name} (talento)`, kind: "feat" });
   if (bg.toolChoice) {
     choices.push({ id: "background.tool", kind: "tool", label: bg.toolChoice.label, count: 1, from: bg.toolChoice.from, source: bg.name });
   }
@@ -118,21 +122,21 @@ export function collectFeatures(ch: CharacterData, reg: Registry, classLevels: R
         source: cls.name,
       });
     }
-    for (const f of cls.features) if ((f.level ?? 1) <= lvl) active.push({ feature: f, source: cls.name, classId });
+    for (const f of cls.features) if ((f.level ?? 1) <= lvl) active.push({ feature: f, source: cls.name, classId, kind: "class" });
     if (lvl >= cls.subclassLevel) {
       choices.push({ id: `${classId}.subclass`, kind: "subclass", label: `Sottoclasse (${cls.name})`, count: 1, source: cls.name });
       const subId = ch.subclasses[classId];
       const sub = subId ? reg.subclasses.get(subId) : undefined;
-      if (sub) for (const f of sub.features) if ((f.level ?? 1) <= lvl) active.push({ feature: f, source: sub.name, classId });
+      if (sub) for (const f of sub.features) if ((f.level ?? 1) <= lvl) active.push({ feature: f, source: sub.name, classId, kind: "class" });
     }
   }
 
-  for (const f of ch.customFeatures ?? []) active.push({ feature: f, source: "Personalizzato" });
+  for (const f of ch.customFeatures ?? []) active.push({ feature: f, source: "Personalizzato", kind: "custom" });
 
   // Le scelte dei privilegi possono portare talenti, che a loro volta hanno scelte.
   const seenFeats = new Set<string>(bgFeat ? [bgFeat.id] : []);
   for (let i = 0; i < active.length; i++) {
-    const { feature, source, classId } = active[i]!;
+    const { feature, source, classId, kind } = active[i]!;
     for (const c of feature.choices ?? []) {
       choices.push({ ...c, source, classId, featureId: feature.id, featureName: feature.name });
       if (c.kind !== "feat") continue;
@@ -140,12 +144,12 @@ export function collectFeatures(ch: CharacterData, reg: Registry, classLevels: R
         const feat = reg.feats.get(featId);
         if (!feat) continue;
         if (feat.repeatable) {
-          active.push({ feature: scopeFeature(feat.feature, c.id), source: `${feature.name}: ${feat.name}`, classId });
+          active.push({ feature: scopeFeature(feat.feature, c.id), source: `${feature.name}: ${feat.name}`, classId, kind: featKind(feat, kind) });
           continue;
         }
         if (seenFeats.has(feat.id)) continue;
         seenFeats.add(feat.id);
-        active.push({ feature: feat.feature, source: `${feature.name}: ${feat.name}`, classId });
+        active.push({ feature: feat.feature, source: `${feature.name}: ${feat.name}`, classId, kind: featKind(feat, kind) });
       }
     }
   }
@@ -160,6 +164,11 @@ export function collectFeatures(ch: CharacterData, reg: Registry, classLevels: R
   }
 
   return { active, choices, chosenSkills, chosenTools };
+}
+
+/** Le opzioni di classe (manovre, suppliche...) restano privilegi di chi le concede; i talenti veri vanno tra i talenti. */
+function featKind(feat: FeatDef, parent: FeatureKind): FeatureKind {
+  return feat.category === "option" || feat.category === "fighting-style" ? parent : "feat";
 }
 
 function equippedGear(ch: CharacterData, reg: Registry) {
@@ -506,23 +515,23 @@ export function computeSheet(ch: CharacterData, reg: Registry, opts: ComputeOpti
   const features: ComputedSheet["features"] = [];
   const dice: ComputedSheet["dice"] = [];
   const widgets: WidgetRef[] = [...CORE_WIDGETS];
-  for (const { feature, source } of active) {
-    features.push({ id: feature.id, name: feature.name, source, description: feature.description });
+  for (const { feature, source, kind, classId } of active) {
+    features.push({ id: feature.id, name: feature.name, source, kind, classId, description: feature.description });
     for (const d of feature.dice ?? []) {
       if (!evalCondition(d.when, ctx)) continue;
-      dice.push({ id: d.id, name: d.name, expr: resolveDice(d.dice, ctx), source, damageType: d.damageType, note: d.note });
+      dice.push({ id: d.id, name: d.name, expr: resolveDice(d.dice, ctx), source, classId, damageType: d.damageType, note: d.note });
     }
     for (const r of feature.resources ?? []) {
       const max = Math.max(0, evalValue(r.max, ctx));
       const spent = Math.min(max, ch.state.resourcesSpent[r.id] ?? 0);
-      resources.push({ id: r.id, name: r.name, source, max, spent, remaining: max - spent, shortRest: r.shortRest, longRest: r.longRest ?? "all" });
+      resources.push({ id: r.id, name: r.name, source, classId, max, spent, remaining: max - spent, shortRest: r.shortRest, longRest: r.longRest ?? "all" });
     }
     for (const t of feature.toggles ?? []) {
-      toggles.push({ id: t.id, name: t.name, active: !!ch.state.toggles[t.id], available: evalCondition(t.when, ctx) });
+      toggles.push({ id: t.id, name: t.name, classId, active: !!ch.state.toggles[t.id], available: evalCondition(t.when, ctx) });
     }
     for (const w of feature.widgets ?? []) widgets.push(w);
   }
-  for (const { feature, source } of active) {
+  for (const { feature, source, classId } of active) {
     for (const a of feature.actions ?? []) {
       const res = a.cost ? resources.find((r) => r.id === a.cost!.resource) : undefined;
       const affordable = !a.cost || (res !== undefined && res.remaining >= a.cost.amount);
@@ -530,6 +539,7 @@ export function computeSheet(ch: CharacterData, reg: Registry, opts: ComputeOpti
         ...a,
         roll: a.roll ? { dice: resolveDice(a.roll.dice, ctx), plus: a.roll.plus } : undefined,
         source,
+        classId,
         available: evalCondition(a.when, ctx) && affordable,
       });
     }

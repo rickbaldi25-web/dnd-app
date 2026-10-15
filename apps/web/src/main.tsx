@@ -4,6 +4,7 @@ import { loadContent } from "./content";
 import "./styles/tokens.css";
 import "./styles/app.css";
 import "./styles/theme.css";
+import "./styles/fullsheet.css";
 
 const root = createRoot(document.getElementById("root")!);
 

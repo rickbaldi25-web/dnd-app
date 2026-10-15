@@ -46,14 +46,14 @@ export function Panel({ title, children, aside, className = "" }: { title?: stri
   );
 }
 
-function breakdown(s: Stat): string {
+export function breakdown(s: Stat): string {
   const lines = s.parts.map((p) => `${p.label}: ${formatMod(p.value)}`);
   if (s.overridden) lines.push(`Forzato a mano (calcolato: ${s.computed})`);
   return lines.join("\n");
 }
 
 /** Numero con dettaglio del calcolo; in modalità correzione diventa un campo di override. */
-function StatNumber({ c, path, s, signed = false }: { c: CharacterController; path: string; s: Stat; signed?: boolean }) {
+export function StatNumber({ c, path, s, signed = false }: { c: CharacterController; path: string; s: Stat; signed?: boolean }) {
   const edit = useContext(EditModeContext) && c.automation !== "full";
   if (edit) {
     return (
@@ -81,7 +81,7 @@ function StatNumber({ c, path, s, signed = false }: { c: CharacterController; pa
   );
 }
 
-function useRoller() {
+export function useRoller() {
   const { push } = useLog();
   return (label: string, bonus: number, mode: RollMode = "normal") => {
     const r = rollD20(bonus, mode);
@@ -213,6 +213,65 @@ export function CombatStatsWidget({ c }: WidgetProps) {
 
 /** Oltre questo massimo i pallini non si contano più a colpo d'occhio: si passa a un contatore. */
 const PIPS_MAX = 12;
+
+/** Pallini (o contatore, se sono tanti) di una risorsa: si toccano per spendere o recuperare. */
+export function ResourcePips({ c, r }: { c: CharacterController; r: CharacterController["sheet"]["resources"][number] }) {
+  const setRemaining = (rem: number) =>
+    c.update((ch) => ({ ...ch, state: { ...ch.state, resourcesSpent: { ...ch.state.resourcesSpent, [r.id]: r.max - rem } } }));
+  return r.max > PIPS_MAX ? (
+    <div className="counter">
+      <button className="btn" aria-label="Spendi 1" disabled={r.remaining <= 0} onClick={() => setRemaining(r.remaining - 1)}>
+        −
+      </button>
+      <input
+        type="number"
+        min={0}
+        max={r.max}
+        value={r.remaining}
+        aria-label={`${r.name}: rimasti su ${r.max}`}
+        onChange={(e) => setRemaining(Math.max(0, Math.min(r.max, Number(e.currentTarget.value) || 0)))}
+      />
+      <button className="btn" aria-label="Recupera 1" disabled={r.remaining >= r.max} onClick={() => setRemaining(r.remaining + 1)}>
+        +
+      </button>
+    </div>
+  ) : (
+    <div className="pips" role="group" aria-label={`${r.name}: ${r.remaining} su ${r.max}`}>
+      {Array.from({ length: r.max }, (_, i) => {
+        const filled = i < r.remaining;
+        return (
+          <button
+            key={i}
+            className={`pip ${filled ? "is-filled" : ""}`}
+            aria-label={filled ? `Spendi (resta ${i})` : `Recupera (arriva a ${i + 1})`}
+            onClick={() => setRemaining(filled ? i : i + 1)}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+/** Interruttore di uno stato di classe (Ira, Forma selvatica...): attivarlo può spendere un uso. */
+export function ToggleSwitch({ c, t }: { c: CharacterController; t: CharacterController["sheet"]["toggles"][number] }) {
+  const onAction = c.sheet.actions.find((a) => a.outcome?.kind === "toggleOn" && a.outcome.toggle === t.id);
+  const flip = () => {
+    if (!t.active && onAction) c.act(runAction(c.ch, registry, onAction.id));
+    else c.act(setToggle(c.ch, t.id, !t.active), { direct: true });
+  };
+  return (
+    <button className="toggle" role="switch" aria-checked={t.active} onClick={flip} disabled={!t.available && !t.active}>
+      <span className="toggle-track">
+        <span className="toggle-thumb" />
+      </span>
+      <span className="toggle-text">
+        <span className="toggle-label">{t.name}</span>
+        {onAction?.cost && !t.active && <span className="muted small">Attivarla spende 1 uso</span>}
+        {!t.available && !t.active && <span className="muted small">Non disponibile ora</span>}
+      </span>
+    </button>
+  );
+}
 
 export function ResourceWidget({ c, w }: WidgetProps) {
   const r = c.sheet.resources.find((x) => x.id === w.ref);
@@ -365,7 +424,7 @@ export function DeathSavesWidget({ c }: WidgetProps) {
 /* ------------------------------------------------------------------ */
 
 /** Un'azione di classe, con i campi per ciò che il giocatore deve decidere (quanti punti, quali slot). */
-function ActionRow({ c, a }: { c: CharacterController; a: CharacterController["sheet"]["actions"][number] }) {
+export function ActionRow({ c, a }: { c: CharacterController; a: CharacterController["sheet"]["actions"][number] }) {
   const [amount, setAmount] = useState(1);
   const [slots, setSlots] = useState<Record<string, number>>({});
   const [slotLevel, setSlotLevel] = useState(1);
@@ -717,7 +776,7 @@ export function FeaturesWidget({ c }: WidgetProps) {
 }
 
 /** Borsello: un campo per moneta, si salva uscendo dal campo. */
-function Purse({ c }: WidgetProps) {
+export function Purse({ c }: WidgetProps) {
   const [draft, setDraft] = useState<Record<string, string>>({});
   const value = (coin: Coin) => draft[coin] ?? String(c.ch.coins?.[coin] ?? 0);
   const commit = (coin: Coin) => {
@@ -757,8 +816,8 @@ export function InventoryWidget({ c, w }: WidgetProps) {
       return { ...ch, equipment };
     });
   return (
-    <Panel title="Inventario" className="inventory-panel">
-      <Purse c={c} w={w} />
+    <Panel title={(w.props?.title as string) ?? "Inventario"} className="inventory-panel">
+      {w.props?.purse !== false && <Purse c={c} w={w} />}
       {c.ch.equipment.length === 0 && <p className="muted">Nessun oggetto. Cercane uno qui sotto.</p>}
       <ul className="inv-list">
         {c.ch.equipment.map((e, i) => (
